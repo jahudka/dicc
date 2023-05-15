@@ -1,0 +1,18 @@
+{
+  "extends": "@tsconfig/node18",
+  "compilerOptions": {
+    "declaration": true,
+    "noEmitOnError": true,
+    "moduleResolution": "NodeNext",
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true,
+    "strictNullChecks": true,
+    "target": "ESNext",
+    "outDir": "dist"
+  },
+  "include": [
+    "src"
+  ]
+}
