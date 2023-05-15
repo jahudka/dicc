@@ -40,7 +40,7 @@ will be inside the definition file (or files).
 ### Highlights
  - type-based autowiring
  - supports multiple services of the same type
- - supports async services (that is, services which need to be created
+ - supports _async_ services (that is, services which need to be created
    asynchronously)
  - supports _scoped_ services private to a given asynchronous execution
    context, as well as fully private services
@@ -48,11 +48,11 @@ will be inside the definition file (or files).
    registered manually in order to be available as dependencies to other
    services
  - on top of injecting simple dependencies, supports a few other injection
-   schemes:
+   schemes, based on the declared type of the argument being injected:
    - `Promise<T>` - will inject a Promise for an async service without waiting
      to resolve it
    - `T[]` - will inject an array containing all services of type `T`; `T` can
-     be `T[]` for async services
+     be `Promise<T[]>` for async services
    - `() => T` - will inject an _accessor_ for service of type `T`; `T` can be
      `T`, `T[]`, `Promise<T>` or `Promise<T[]>`
    - `Iterable<T>` - will inject an _iterable_ which allows lazy iteration over
