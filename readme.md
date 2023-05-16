@@ -50,10 +50,10 @@ will be inside the definition file (or files).
    schemes, based on the declared type of the argument being injected:
    - `Promise<T>` - will inject a Promise for an async service without waiting
      to resolve it
-   - `T[]` - will inject an array containing all services of type `T`; `T` can
+   - `T[]` - will inject an array containing all services of type `T`; can
      be `Promise<T[]>` for async services
-   - `() => T` - will inject an _accessor_ for service of type `T`; `T` can be
-     `T`, `T[]`, `Promise<T>` or `Promise<T[]>`
+   - `() => T` - will inject an _accessor_ for service of type `T`; the accessor
+     return type can be `T`, `T[]`, `Promise<T>` or `Promise<T[]>`
    - `Iterable<T>` - will inject an _iterable_ which allows lazy iteration over
      all services of type `T`
    - `AsyncIterable<T>` - same thing for async services
