@@ -1,5 +1,6 @@
 {
-  "name": "dicc",
+  "name": "dicc-ws",
+  "private": true,
   "description": "Compile-time dependency injection",
   "keywords": [
     "typescript",
@@ -9,22 +10,6 @@
     "ioc",
     "inversion of control"
   ],
-  "version": "0.0.4",
   "license": "MIT",
-  "files": [
-    "dist"
-  ],
-  "bin": {
-    "dicc": "dist/cli/cli.js"
-  },
-  "main": "dist/lib/index.js",
-  "types": "dist/lib/index.d.ts",
-  "dependencies": {
-    "ts-morph": "^18.0",
-    "typescript": "^5.0"
-  },
-  "devDependencies": {
-    "@tsconfig/node18": "^1.0.1",
-    "@types/node": "^18.15.5"
-  }
+  "workspaces": ["packages/*"]
 }

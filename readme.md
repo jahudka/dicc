@@ -69,7 +69,16 @@ much, but it's something to be aware of.
 
 ## Installation
 
+DICC is split into two packages, because the compiler depends on TypeScript
+and ts-morph, which are probably both something you want to be able to prune
+from your production node modules. The runtime package is tiny and doesn't have
+any other dependencies.
+
 ```shell
+# Compile-time dependency:
+npm i --save-dev dicc-compiler
+
+# Runtime dependency:
 npm i --save dicc
 ```
 

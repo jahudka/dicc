@@ -1,0 +1,29 @@
+{
+  "name": "dicc-compiler",
+  "description": "Compile-time dependency injection",
+  "keywords": [
+    "typescript",
+    "di",
+    "dic",
+    "dependency injection",
+    "ioc",
+    "inversion of control"
+  ],
+  "version": "0.0.4",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "dicc": "dist/cli.js"
+  },
+  "dependencies": {
+    "dicc": "^0.0.4",
+    "ts-morph": "^18.0",
+    "typescript": "^5.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node18": "^2.0",
+    "@types/node": "^18.16"
+  }
+}

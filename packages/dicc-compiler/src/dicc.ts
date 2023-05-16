@@ -45,7 +45,6 @@ export class Dicc {
       this.registry.getDefinitions(),
       input,
       output,
-      this.sourceFiles.getDiccImportSpecifier(output),
       this.options.export ?? 'container',
     );
 

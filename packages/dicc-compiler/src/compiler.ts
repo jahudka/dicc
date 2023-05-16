@@ -13,15 +13,14 @@ export class Compiler {
     definitions: Iterable<ServiceDefinitionInfo>,
     input: SourceFile,
     output: SourceFile,
-    diccImport: string,
     exportName: string,
   ): void {
     output.replaceWithText('');
 
-    this.writeHeader(input, output, diccImport);
+    this.writeHeader(input, output);
 
     output.addStatements((writer) => {
-      writer.writeLine(`export const ${exportName} = new Container({`);
+      writer.writeLine(`\nexport const ${exportName} = new Container({`);
 
       writer.indent(() => {
         for (const definition of [...definitions].sort((a, b) => a.id < b.id ? -1 : 1)) {
@@ -33,9 +32,9 @@ export class Compiler {
     });
   }
 
-  private writeHeader(input: SourceFile, output: SourceFile, diccImport: string): void {
+  private writeHeader(input: SourceFile, output: SourceFile): void {
     output.addImportDeclaration({
-      moduleSpecifier: diccImport,
+      moduleSpecifier: 'dicc',
       namedImports: [{ name: 'Container' }],
     });
 

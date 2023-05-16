@@ -1,5 +1,5 @@
+import { createDefinition } from 'dicc';
 import { IndentationText, NewLineKind, Project, QuoteKind } from 'ts-morph';
-import { createDefinition } from '../lib';
 import { Autowiring } from './autowiring';
 import { Compiler } from './compiler';
 import { DefinitionScanner } from './definitionScanner';

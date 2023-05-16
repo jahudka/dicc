@@ -1,24 +1,22 @@
 .PHONY: default
-default: dist
-
-.PHONY: rebuild
-rebuild: clean dist
+default: build
 
 .PHONY: clean
 clean:
-	rm -rf dist
+	cd packages/dicc && make clean
+	cd packages/dicc-compiler && make clean
 
-.PHONY: tests
-tests:
-	jest
+.PHONY: build
+build:
+	cd packages/dicc && make
+	cd packages/dicc-compiler && make
 
-.PHONY: all
-all: rebuild tests
+.PHONY: rebuild
+rebuild:
+	cd packages/dicc && make rebuild
+	cd packages/dicc-compiler && make rebuild
 
-.PHONY: compile
-compile:
-	dist/cli/cli.js -p tsconfig.json -i src/cli/definitions.ts -o src/cli/container.ts
-
-dist:
-	node_modules/.bin/tsc
-	chmod +x dist/cli/cli.js
+.PHONY: publish
+publish:
+	cd packages/dicc && make publish
+	cd packages/dicc-compiler && make publish

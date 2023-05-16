@@ -1,5 +1,6 @@
-import { Container } from '../lib';
+import { Container } from 'dicc';
 import * as defs from './definitions';
+
 export const container = new Container({
   'autowiring': {
     ...defs.autowiring,

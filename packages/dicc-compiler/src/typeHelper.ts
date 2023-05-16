@@ -23,7 +23,7 @@ type ReferenceMap = {
 };
 
 const helperSource = `
-export { Container, ServiceTypes, createDefinition } from '%dicc%';
+export { Container, ServiceTypes, createDefinition } from 'dicc';
 export type TPromise<T> = Promise<T>;
 export type TIterable<T> = Iterable<T>;
 export type TAsyncIterable<T> = AsyncIterable<T>;
