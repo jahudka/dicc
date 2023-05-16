@@ -36,9 +36,8 @@ container.
 The only place in your code you will ever `import { anything } from 'dicc'`
 will be inside the definition file (or files).
 
-
 ### Highlights
- - type-based autowiring
+ - type-based autowiring, doesn't care about type or parameter names
  - supports multiple services of the same type
  - supports _async_ services (that is, services which need to be created
    asynchronously)
@@ -58,6 +57,15 @@ will be inside the definition file (or files).
    - `Iterable<T>` - will inject an _iterable_ which allows lazy iteration over
      all services of type `T`
    - `AsyncIterable<T>` - same thing for async services
+
+### Note on types
+
+TypeScript is a _structurally-typed_ language, meaning a type is considered
+assignable to another type if it has a matching structure. Type resolution in
+DICC, however, is strictly referential, and therefore DICC can be said to use
+_nominal_ typing for dependency resolution. In practice, it shouldn't limit you
+much, but it's something to be aware of.
+
 
 ## Installation
 
