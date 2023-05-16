@@ -20,8 +20,12 @@ export class DefinitionScanner {
     this.helper = helper;
   }
 
-  scan(input: SourceFile): void {
+  scanDefinitions(input: SourceFile): void {
     this.scanModule(input);
+  }
+
+  scanUsages(): void {
+
   }
 
   private scanModule(module: SourceFile, prefix: string = ''): void {

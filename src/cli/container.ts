@@ -28,7 +28,7 @@ export const container = new Container({
     ...defs.dicc,
     aliases: ['Dicc.0'],
     factory: (di: Container) => new defs.dicc.factory(
-      di.get('Project.0'),
+      di.get('SourceFiles.0'),
       di.get('TypeHelper.0'),
       di.get('ServiceRegistry.0'),
       di.get('DefinitionScanner.0'),
@@ -53,11 +53,19 @@ export const container = new Container({
     aliases: ['ServiceRegistry.0'],
     factory: () => new defs.serviceRegistry.factory(),
   },
+  'sourceFiles': {
+    ...defs.sourceFiles,
+    aliases: ['SourceFiles.0'],
+    factory: (di: Container) => new defs.sourceFiles.factory(
+      di.get('Project.0'),
+      di.get('DiccOptions.0'),
+    ),
+  },
   'typeHelper': {
     ...defs.typeHelper,
     aliases: ['TypeHelper.0'],
     factory: (di: Container) => new defs.typeHelper.factory(
-      di.get('Project.0'),
+      di.get('SourceFiles.0'),
     ),
   },
 });

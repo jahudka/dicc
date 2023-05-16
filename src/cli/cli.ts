@@ -17,6 +17,10 @@ const args = parseArgs({
       type: 'string',
       short: 'o',
     },
+    export: {
+      type: 'string',
+      short: 'e',
+    },
   },
   strict: true,
 });

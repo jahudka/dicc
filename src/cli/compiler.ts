@@ -12,11 +12,16 @@ export class Compiler {
     this.helper = helper;
   }
 
-  compile(definitions: Iterable<ServiceDefinitionInfo>, input: SourceFile, output: SourceFile): void {
+  compile(
+    definitions: Iterable<ServiceDefinitionInfo>,
+    input: SourceFile,
+    output: SourceFile,
+    exportName: string,
+  ): void {
     this.writeHeader(input, output);
 
     output.addStatements((writer) => {
-      writer.writeLine('export const container = new Container({');
+      writer.writeLine(`export const ${exportName} = new Container({`);
 
       writer.indent(() => {
         for (const definition of [...definitions].sort((a, b) => a.id < b.id ? -1 : 1)) {
@@ -108,13 +113,18 @@ export class Compiler {
     } else if (param.flags & TypeFlag.Iterable) {
       method = param.flags & TypeFlag.Async ? 'createAsyncIterator' : 'createIterator';
     } else {
-      if (!(param.flags & TypeFlag.Async) && this.autowiring.isAsync(param.type)) {
+      const targetIsAsync = this.autowiring.isAsync(param.type);
+
+      if (!(param.flags & TypeFlag.Async) && targetIsAsync) {
         if (param.flags & TypeFlag.Array) {
           prefix = 'await Promise.all(';
           postfix = ')';
         } else {
           prefix = 'await ';
         }
+      } else if (param.flags & TypeFlag.Async && !targetIsAsync) {
+        prefix = 'Promise.resolve().then(() => ';
+        postfix = ')';
       }
 
       method = param.flags & TypeFlag.Array ? 'find' : 'get';

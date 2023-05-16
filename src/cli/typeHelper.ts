@@ -2,8 +2,6 @@ import {
   CallExpression,
   ClassDeclaration,
   Node,
-  Project,
-  ScriptKind,
   SourceFile,
   SyntaxKind,
   Symbol,
@@ -12,6 +10,7 @@ import {
   VariableDeclaration,
   Expression,
 } from 'ts-morph';
+import { SourceFiles } from './sourceFiles';
 import { TypeFlag } from './types';
 
 type ReferenceMap = {
@@ -25,12 +24,20 @@ type ReferenceMap = {
 
 const selfCompiling = !__dirname.includes('/node_modules/');
 
+const helperSource = `
+export { Container, ServiceTypes, createDefinition } from '${selfCompiling ? './src/lib' : 'dicc'}';
+export type TPromise<T> = Promise<T>;
+export type TIterable<T> = Iterable<T>;
+export type TAsyncIterable<T> = AsyncIterable<T>;
+`;
+
 export class TypeHelper {
   private readonly helper: SourceFile;
   private readonly refs: ReferenceMap;
 
-  constructor(project: Project) {
-    [this.helper, this.refs] = this.resolveBaseTypes(project);
+  constructor(sourceFiles: SourceFiles) {
+    this.helper = sourceFiles.createHelper(helperSource);
+    this.refs = this.resolveBaseTypes();
   }
 
   destroy(): void {
@@ -154,18 +161,10 @@ export class TypeHelper {
     }
   }
 
-  private resolveBaseTypes(project: Project): [SourceFile, ReferenceMap] {
-    const dicc = selfCompiling ? './src/lib' : 'dicc';
-    const helper = project.createSourceFile('@@dicc-helper.d.ts', `
-export { Container, ServiceTypes, createDefinition } from '${dicc}';
-export type TPromise<T> = Promise<T>;
-export type TIterable<T> = Iterable<T>;
-export type TAsyncIterable<T> = AsyncIterable<T>;
-`, { scriptKind: ScriptKind.TS });
+  private resolveBaseTypes(): ReferenceMap {
+    const src = this.helper.getExportedDeclarations();
 
-    const src = helper.getExportedDeclarations();
-
-    const refs: ReferenceMap = {
+    return {
       Promise: this.resolveRootType(src.get('TPromise')!.find(Node.isTypeAliasDeclaration)!.getType()),
       Iterable: this.resolveRootType(src.get('TIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
       AsyncIterable: this.resolveRootType(src.get('TAsyncIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
@@ -173,8 +172,6 @@ export type TAsyncIterable<T> = AsyncIterable<T>;
       ServiceTypes: this.resolveRootType(src.get('ServiceTypes')!.find(Node.isTypeAliasDeclaration)!.getType()),
       createDefinition: src.get('createDefinition')!.find(Node.isFunctionDeclaration)!.getSymbolOrThrow(),
     };
-
-    return [helper, refs];
   }
 
   private resolveRootType(type: Type): Type {

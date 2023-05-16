@@ -157,11 +157,13 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     return service;
   }
 
-  private async createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
-    const servicePromise = definition.factory(this).then((service) => {
-      this.runHook(definition, service, 'onCreate');
-      return service;
-    });
+  private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
+    const servicePromise = Promise.resolve() // needed so that definition.factory() is never
+      .then(() => definition.factory(this)) // called synchronously
+      .then((service) => {
+        this.runHook(definition, service, 'onCreate');
+        return service;
+      });
 
     this.getStore(definition.scope)?.set(id, servicePromise);
     return servicePromise;

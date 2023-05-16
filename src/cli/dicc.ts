@@ -1,13 +1,13 @@
-import { Project, ScriptKind } from 'ts-morph';
 import { Autowiring } from './autowiring';
 import { Compiler } from './compiler';
 import { DefinitionScanner } from './definitionScanner';
 import { ServiceRegistry } from './serviceRegistry';
+import { SourceFiles } from './sourceFiles';
 import { TypeHelper } from './typeHelper';
 import { DiccOptions } from './types';
 
 export class Dicc {
-  private readonly project: Project;
+  private readonly sourceFiles: SourceFiles;
   private readonly helper: TypeHelper;
   private readonly registry: ServiceRegistry;
   private readonly scanner: DefinitionScanner;
@@ -16,7 +16,7 @@ export class Dicc {
   private readonly options: DiccOptions;
 
   constructor(
-    project: Project,
+    sourceFiles: SourceFiles,
     helper: TypeHelper,
     registry: ServiceRegistry,
     scanner: DefinitionScanner,
@@ -24,7 +24,7 @@ export class Dicc {
     compiler: Compiler,
     options: DiccOptions,
   ) {
-    this.project = project;
+    this.sourceFiles = sourceFiles;
     this.helper = helper;
     this.registry = registry;
     this.scanner = scanner;
@@ -34,17 +34,24 @@ export class Dicc {
   }
 
   async compile(): Promise<void> {
-    const input = this.project.getSourceFileOrThrow(this.options.input);
+    const input = this.sourceFiles.getInput();
+    const output = this.sourceFiles.getOutput();
 
-    this.scanner.scan(input);
+    this.scanner.scanDefinitions(input);
     this.autowiring.checkDependencies();
+    // todo
+    //  - check calls to get(), find(), createAccessor(), createListAccessor(), createIterator()
+    //    and createAsyncIterator()
+    //  - check that at least one register() call exists for each dynamic service
+    this.scanner.scanUsages();
 
-    const output = this.project.createSourceFile(this.options.output, '', {
-      scriptKind: ScriptKind.TS,
-      overwrite: true,
-    });
+    this.compiler.compile(
+      this.registry.getDefinitions(),
+      input,
+      output,
+      this.options.export ?? 'container',
+    );
 
-    this.compiler.compile(this.registry.getDefinitions(), input, output);
     this.helper.destroy();
     await output.save();
   }

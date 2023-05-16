@@ -112,4 +112,24 @@ container.get('orm.userRepository');
 container.get('orm.commentRepository');
 ```
 
-_(more documentation to come, but I'm done for the day)_
+
+### Compiling a container
+
+Whenever you change service definitions you must re-run the compiler in order
+to get a matching container. This is done using the `dicc` executable shipped
+with DICC. The executable takes the following options:
+
+ - `-i` / `--input`: **required**, the path to the module which exports your
+   definitions.
+ - `-o` / `--output`: **required**, the path to the module which should contain
+   the compiled container. This file will be overwritten!
+ - `-p` / `--project`: the path to `tsconfig.json`. Defaults to
+   `./tsconfig.json`.
+ - `-e` / `--export`: the name of the variable holding the compiled container
+   instance exported from the compiled module. Defaults to `container`.
+
+Example:
+
+```shell
+node_modules/.bin/dicc -i src/di/definitions/index.ts -o src/di/index.ts
+```
