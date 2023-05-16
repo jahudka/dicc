@@ -1,10 +1,19 @@
 {
   "name": "dicc",
   "description": "Compile-time dependency injection",
-  "keywords": ["typescript", "di", "dic", "dependency injection", "ioc", "inversion of control"],
-  "version": "0.0.1",
+  "keywords": [
+    "typescript",
+    "di",
+    "dic",
+    "dependency injection",
+    "ioc",
+    "inversion of control"
+  ],
+  "version": "0.0.2",
   "license": "MIT",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "bin": {
     "dicc": "dist/cli/cli.js"
   },
