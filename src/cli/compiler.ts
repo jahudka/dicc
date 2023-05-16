@@ -1,24 +1,24 @@
 import { CodeBlockWriter, SourceFile } from 'ts-morph';
 import { Autowiring } from './autowiring';
-import { TypeHelper } from './typeHelper';
 import { ServiceDefinitionInfo, ServiceFactoryParameter, TypeFlag } from './types';
 
 export class Compiler {
   private readonly autowiring: Autowiring;
-  private readonly helper: TypeHelper;
 
-  constructor(autowiring: Autowiring, helper: TypeHelper) {
+  constructor(autowiring: Autowiring) {
     this.autowiring = autowiring;
-    this.helper = helper;
   }
 
   compile(
     definitions: Iterable<ServiceDefinitionInfo>,
     input: SourceFile,
     output: SourceFile,
+    diccImport: string,
     exportName: string,
   ): void {
-    this.writeHeader(input, output);
+    output.replaceWithText('');
+
+    this.writeHeader(input, output, diccImport);
 
     output.addStatements((writer) => {
       writer.writeLine(`export const ${exportName} = new Container({`);
@@ -33,9 +33,9 @@ export class Compiler {
     });
   }
 
-  private writeHeader(input: SourceFile, output: SourceFile): void {
+  private writeHeader(input: SourceFile, output: SourceFile, diccImport: string): void {
     output.addImportDeclaration({
-      moduleSpecifier: this.helper.getDiccImportSpecifier(output),
+      moduleSpecifier: diccImport,
       namedImports: [{ name: 'Container' }],
     });
 

@@ -18,7 +18,7 @@ export class ServiceRegistry {
   }
 
   has(id: string): boolean {
-    return this.aliases.has(id);
+    return this.definitions.has(id);
   }
 
   getDefinitions(): Iterable<ServiceDefinitionInfo> {

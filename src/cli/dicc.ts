@@ -39,16 +39,13 @@ export class Dicc {
 
     this.scanner.scanDefinitions(input);
     this.autowiring.checkDependencies();
-    // todo
-    //  - check calls to get(), find(), createAccessor(), createListAccessor(), createIterator()
-    //    and createAsyncIterator()
-    //  - check that at least one register() call exists for each dynamic service
     this.scanner.scanUsages();
 
     this.compiler.compile(
       this.registry.getDefinitions(),
       input,
       output,
+      this.sourceFiles.getDiccImportSpecifier(output),
       this.options.export ?? 'container',
     );
 

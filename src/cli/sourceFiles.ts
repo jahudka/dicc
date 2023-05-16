@@ -1,6 +1,13 @@
 import { Project, ScriptKind, SourceFile } from 'ts-morph';
 import { DiccOptions } from './types';
 
+const selfCompiling = !__dirname.includes('/node_modules/');
+
+const emptyOutputSource = `
+import { Container } from '${selfCompiling ? '../lib' : 'dicc'}';
+export const container = new Container({});
+`;
+
 export class SourceFiles {
   private readonly project: Project;
   private readonly input: SourceFile;
@@ -8,11 +15,8 @@ export class SourceFiles {
 
   constructor(project: Project, options: DiccOptions) {
     this.project = project;
-
-    project.getSourceFile(options.output)?.forget();
-
     this.input = project.getSourceFileOrThrow(options.input);
-    this.output = project.createSourceFile(options.output, '', {
+    this.output = project.createSourceFile(options.output, emptyOutputSource, {
       scriptKind: ScriptKind.TS,
       overwrite: true,
     });
@@ -26,8 +30,20 @@ export class SourceFiles {
     return this.output;
   }
 
+  getDiccImportSpecifier(dst: SourceFile): string {
+    if (!selfCompiling) {
+      return 'dicc';
+    }
+
+    return dst.getRelativePathAsModuleSpecifierTo(
+      dst.getProject().getDirectoryOrThrow('src/lib').getPath(),
+    );
+  }
+
   createHelper(source: string): SourceFile {
-    return this.project.createSourceFile('@@dicc-helper.d.ts', source, {
+    const specifier = selfCompiling ? './src/lib' : 'dicc';
+
+    return this.project.createSourceFile('@dicc-helper.d.ts', source.replace('%dicc%', specifier), {
       scriptKind: ScriptKind.TS,
       overwrite: true,
     });

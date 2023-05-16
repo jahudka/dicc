@@ -66,8 +66,6 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   register<K extends keyof M>(id: K, service: GetService<M, K>): void;
   register<T>(id: string, service: T): void;
   register<T>(id: string, service: T): void {
-    this.checkCompiled(id, 'register');
-
     const definition = this.definitions.get(id);
 
     if (!definition) {
@@ -195,12 +193,6 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
       return store;
     } else {
       return undefined;
-    }
-  }
-
-  private checkCompiled<T>(value: T | undefined, method: string): asserts value is T {
-    if (!value) {
-      throw new Error(`Invalid call to Container.${method}(), did you forget to run 'dicc'?`);
     }
   }
 }

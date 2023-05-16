@@ -22,10 +22,8 @@ type ReferenceMap = {
   createDefinition: Symbol;
 };
 
-const selfCompiling = !__dirname.includes('/node_modules/');
-
 const helperSource = `
-export { Container, ServiceTypes, createDefinition } from '${selfCompiling ? './src/lib' : 'dicc'}';
+export { Container, ServiceTypes, createDefinition } from '%dicc%';
 export type TPromise<T> = Promise<T>;
 export type TIterable<T> = Iterable<T>;
 export type TAsyncIterable<T> = AsyncIterable<T>;
@@ -42,16 +40,6 @@ export class TypeHelper {
 
   destroy(): void {
     this.helper.forget();
-  }
-
-  getDiccImportSpecifier(dst: SourceFile): string {
-    if (!selfCompiling) {
-      return 'dicc';
-    }
-
-    return dst.getRelativePathAsModuleSpecifierTo(
-      dst.getProject().getDirectoryOrThrow('src/lib').getPath(),
-    );
   }
 
   * getModuleExports(module: SourceFile): Iterable<[string, SourceFile | VariableDeclaration]> {

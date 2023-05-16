@@ -13,7 +13,6 @@ export const container = new Container({
     aliases: ['Compiler.0'],
     factory: (di: Container) => new defs.compiler.factory(
       di.get('Autowiring.0'),
-      di.get('TypeHelper.0'),
     ),
   },
   'definitionScanner': {

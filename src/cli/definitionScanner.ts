@@ -25,7 +25,33 @@ export class DefinitionScanner {
   }
 
   scanUsages(): void {
+    for (const method of ['get', 'find', 'createAccessor', 'createListAccessor', 'createIterator', 'createAsyncIterator']) {
+      for (const call of this.helper.getContainerMethodCalls(method)) {
+        const [id] = call.getArguments();
 
+        if (Node.isStringLiteral(id) && !this.registry.has(id.getLiteralValue())) {
+          const sf = id.getSourceFile();
+          const ln = id.getStartLineNumber();
+          console.log(`Warning: unknown service '${id.getLiteralValue()}' in call to Container.${method}() in ${sf.getFilePath()} on line ${ln}`);
+        }
+      }
+    }
+
+    const registrations: Set<string> = new Set();
+
+    for (const call of this.helper.getContainerMethodCalls('register')) {
+      const [id] = call.getArguments();
+
+      if (Node.isStringLiteral(id)) {
+        registrations.add(id.getLiteralValue());
+      }
+    }
+
+    for (const definition of this.registry.getDefinitions()) {
+      if (!definition.factory && !registrations.has(definition.id)) {
+        console.log(`Warning: no Container.register() call found for dynamic service '${definition.id}'`);
+      }
+    }
   }
 
   private scanModule(module: SourceFile, prefix: string = ''): void {
