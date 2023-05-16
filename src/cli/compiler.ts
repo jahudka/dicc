@@ -58,6 +58,10 @@ export class Compiler {
         return;
       }
 
+      if (factory.async) {
+        writer.writeLine(`async: true,`);
+      }
+
       const params = this.compileParameters(factory.parameters);
 
       writer.write(`factory: `);
