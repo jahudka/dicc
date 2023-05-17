@@ -7,8 +7,8 @@ import {
   Symbol,
   Type,
   TypeNode,
-  VariableDeclaration,
   Expression,
+  PropertyName,
 } from 'ts-morph';
 import { SourceFiles } from './sourceFiles';
 import { TypeFlag } from './types';
@@ -42,14 +42,13 @@ export class TypeHelper {
     this.helper.forget();
   }
 
-  * getModuleExports(module: SourceFile): Iterable<[string, SourceFile | VariableDeclaration]> {
-    for (const [name, declarations] of module.getExportedDeclarations()) {
-      for (const declaration of declarations) {
-        if (Node.isSourceFile(declaration) || Node.isVariableDeclaration(declaration)) {
-          yield [name, declaration];
-          break;
-        }
-      }
+  resolveLiteralPropertyName(name: PropertyName): string | number | undefined {
+    if (Node.isIdentifier(name)) {
+      return name.getText();
+    } else if (Node.isStringLiteral(name) || Node.isNumericLiteral(name)) {
+      return name.getLiteralValue();
+    } else {
+      return undefined;
     }
   }
 
@@ -59,11 +58,10 @@ export class TypeHelper {
     if (Node.isSatisfiesExpression(expression)) {
       const satisfies = expression.getTypeNode();
 
-      if (!satisfies || !Node.isTypeReference(satisfies) || this.resolveRootType(satisfies.getTypeName().getType()) !== this.refs.ServiceTypes) {
-        throw new Error(`Invalid "satisfies" expression`);
+      if (satisfies && Node.isTypeReference(satisfies) && this.resolveRootType(satisfies.getTypeName().getType()) === this.refs.ServiceTypes) {
+        [, aliases] = satisfies.getTypeArguments();
       }
 
-      [, aliases] = satisfies.getTypeArguments();
       expression = expression.getExpression();
     }
 

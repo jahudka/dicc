@@ -1,10 +1,16 @@
 import { ServiceScope } from 'dicc';
 import {
   CallExpression,
+  ExportedDeclarations,
+  Expression,
+  Identifier,
+  ModuleDeclaration,
   Node,
+  ObjectLiteralExpression,
   Signature,
   SourceFile,
   Symbol,
+  SyntaxKind,
   Type,
   TypeNode,
 } from 'ts-morph';
@@ -22,7 +28,17 @@ export class DefinitionScanner {
   }
 
   scanDefinitions(input: SourceFile): void {
-    this.scanModule(input);
+    for (const [id, expression] of this.scanNode(input)) {
+      try {
+        const [definition, aliases] = this.helper.extractDefinition(expression);
+
+        if (definition) {
+          this.analyseDefinition(id, definition, aliases);
+        }
+      } catch (e: any) {
+        throw new Error(`Invalid definition '${id}': ${e.message}`);
+      }
+    }
   }
 
   scanUsages(): void {
@@ -55,22 +71,79 @@ export class DefinitionScanner {
     }
   }
 
-  private scanModule(module: SourceFile, prefix: string = ''): void {
-    for (const [name, declaration] of this.helper.getModuleExports(module)) {
-      if (Node.isSourceFile(declaration)) {
-        this.scanModule(declaration, `${prefix}${name}.`);
-      } else {
-        const id = `${prefix}${name}`;
+  private * scanNode(node?: Node, path: string = ''): Iterable<[string, Expression]> {
+    if (Node.isSourceFile(node)) {
+      yield * this.scanModule(node, path);
+    } else if (Node.isModuleDeclaration(node) && node.hasNamespaceKeyword()) {
+      yield * this.scanModule(node, path);
+    } else if (Node.isObjectLiteralExpression(node)) {
+      yield * this.scanObject(node, path);
+    } else if (Node.isVariableDeclaration(node)) {
+      yield * this.scanNode(node.getInitializer(), path);
+    } else if (Node.isIdentifier(node)) {
+      yield * this.scanIdentifier(node, path);
+    } else if (Node.isExpression(node)) {
+      yield [path.replace(/\.$/, ''), node];
+    }
+  }
 
-        try {
-          const [definition, aliases] = this.helper.extractDefinition(declaration.getInitializer());
+  private * scanModule(node: SourceFile | ModuleDeclaration, path: string = ''): Iterable<[string, Expression]> {
+    for (const [name, declarations] of node.getExportedDeclarations()) {
+      yield * this.scanExportedDeclarations(declarations, `${path}${name}.`);
+    }
+  }
 
-          if (definition) {
-            this.analyseDefinition(id, definition, aliases);
-          }
-        } catch (e: any) {
-          throw new Error(`Invalid definition '${id}': ${e.message}`);
+  private * scanExportedDeclarations(declarations?: ExportedDeclarations[], path: string = ''): Iterable<[string, Expression]> {
+    for (const declaration of declarations ?? []) {
+      yield * this.scanNode(declaration, path);
+    }
+  }
+
+  private * scanObject(node: ObjectLiteralExpression, path: string = ''): Iterable<[string, Expression]> {
+    for (const prop of node.getProperties()) {
+      if (Node.isSpreadAssignment(prop)) {
+        yield * this.scanNode(prop.getExpression(), path);
+      } else if (Node.isShorthandPropertyAssignment(prop)) {
+        yield * this.scanNode(prop.getNameNode(), `${path}${prop.getName()}.`);
+      } else if (Node.isPropertyAssignment(prop)) {
+        const name = this.helper.resolveLiteralPropertyName(prop.getNameNode());
+
+        if (name !== undefined) {
+          yield * this.scanNode(prop.getInitializerOrThrow(), `${path}${name}.`);
         }
+      }
+    }
+  }
+
+  private * scanIdentifier(node: Identifier, path: string = ''): Iterable<[string, Expression]> {
+    for (const definition of node.getDefinitionNodes()) {
+      if (Node.isNamespaceImport(definition)) {
+        yield * this.scanModule(
+          definition
+            .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
+            .getModuleSpecifierSourceFileOrThrow(),
+          path,
+        );
+      } else if (Node.isImportClause(definition)) {
+        yield * this.scanExportedDeclarations(
+          definition
+            .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
+            .getModuleSpecifierSourceFileOrThrow()
+            .getExportedDeclarations()
+            .get('default'),
+          path,
+        );
+      } else if (Node.isImportSpecifier(definition)) {
+        yield * this.scanExportedDeclarations(
+          definition
+            .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
+            .getModuleSpecifierSourceFileOrThrow()
+            .getExportedDeclarations()
+            .get(definition.getAliasNode()?.getText() ?? definition.getName()),
+          path,
+        );
+      } else if (Node.isVariableDeclaration(definition)) {
+        yield * this.scanNode(definition.getInitializerOrThrow(), path);
       }
     }
   }
