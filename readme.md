@@ -6,9 +6,9 @@ This is a project to _end_ all current TypeScript DI implementations.
 I mean it. **All of them**. With extreme prejudice.
 
 Why? Because they are all based on decorators. (Well, there is _one_ exception,
-and that project was actually what finally pushed me to do this; more on that
-later.) Don't get me wrong - decorators are awesome! I love decorators. I've
-built a pretty big library based _entirely_ on decorators.
+but that one doesn't - and cannot, properly - support async services, hence
+this project.) Don't get me wrong - decorators are awesome! I love decorators.
+I've built a pretty big library based _entirely_ on decorators.
 
 But - and I _cannot stress this enough_ - decorator-based dependency injection
 breaks one of the most sacred dependency injection principles - **your code
@@ -96,6 +96,15 @@ import { HttpServer } from 'insaner';
 
 export const httpServer = createDefinition(HttpServer);
 ```
+
+The first argument to the `createDefinition()` function is the _service
+factory_. This can be either a function which creates an instance of the
+service, or a constructable service class. The type of the service is the return
+type of the service factory (or the instance type of constructable classes).
+
+Factory functions can be _async_ - meaning they can return a _Promise_ for an
+instance instead of the instance itself. This can be useful for some services
+which require asynchronous initialisation.
 
 Services can also be given _aliases_ - additional types the compiler should
 consider as being provided by the service. Think interfaces which the service
@@ -207,6 +216,15 @@ optional, or an error is thrown. This all happens during compilation, so it
 should never happen that a service cannot be resolved at runtime (except with
 dynamic services, if you're not careful).
 
+When a dependency of a service is an async service, meaning that its factory
+function returns a Promise, and a resolved instance of the dependency is
+requested, the compiled factory for the service will `await` the pertinent
+`container.get()` call in order to inject the resolved instance. This in turn
+means that the depending service must also be async, since it cannot be created
+synchronously. The compiler will take care of this automatically - for you, it
+just means that sometimes you'll have to `await` a `container.get()` call; but
+since you shouldn't really have many of those, it's not a big deal.
+
 When an argument is typed for a single instance of a given service type and
 there are multiple definitions matching that type, an error will be thrown
 during compilation. But you can inject multiple services of the same type in
@@ -277,3 +295,14 @@ that there _is_ a DI container, and that includes obtaining services from the
 container. So the ideal way to write code is to wrap everything in services,
 specify inter-service dependencies as constructor parameters and have the DI
 inject the dependencies wherever you need them.
+
+Another argument against fetching services manually using `container.get()` is
+that you'd have to keep track of services _and all their dependencies_ being
+async. When injecting autowired dependencies, the compiler will take care of
+this automatically, and it's one less thing you have to deal with - if a service
+needs async initialisation, then you just deal with that one service, and any
+services which depend on it will still work the same as before. But if you have
+many calls to `container.get()` interspersed throughout your application code,
+and then you make one service async, you'll probably get a lot of compilation
+errors at those call sites, because the return value of `container.get()` will
+suddenly be a Promise. Not optimal.
