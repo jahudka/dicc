@@ -16,13 +16,16 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   private readonly aliases: Map<string, string[]>;
   private readonly globalServices: Store = new Store();
   private readonly localServices: AsyncLocalStorage<Store> = new AsyncLocalStorage();
+  private readonly forkHooks: Set<string> = new Set();
+  private readonly creating: Set<string> = new Set();
 
   constructor(definitions: M) {
     this.definitions = new Map(Object.entries(definitions));
     this.aliases = new Map();
 
-    for (const [id, { aliases }] of this.definitions) {
+    for (const [id, { aliases, onFork }] of this.definitions) {
       this.aliases.set(id, [id]);
+      onFork && this.forkHooks.add(id);
 
       for (const alias of aliases) {
         this.aliases.has(alias) || this.aliases.set(alias, []);
@@ -90,9 +93,9 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     const parent = this.currentStore;
     const store = new Store(parent);
 
-    for (const [id, definition] of this.definitions) {
-      if (definition && parent.has(id)) {
-        const fork = this.runHook(definition, parent.get(id), 'onFork');
+    for (const id of this.forkHooks) {
+      if (parent.has(id)) {
+        const fork = this.runHook(this.definitions.get(id)!, parent.get(id), 'onFork');
         fork && store.set(id, fork);
       }
     }
@@ -102,11 +105,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     } finally {
       for (const [id, service] of store) {
         const definition = this.definitions.get(id);
-
-        if (definition) {
-          this.runHook(definition, service, 'onDestroy');
-        }
-
+        definition && this.runHook(definition, service, 'onDestroy');
         store.delete(id);
       }
     }
@@ -135,8 +134,16 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
 
     if (!definition) {
       throw new Error(`Unknown service '${id}'`);
+    } else if (!definition.factory) {
+      throw new Error(`Cannot create instance of dynamic service '${id}'`);
     } else if (definition.scope === 'local' && !this.localServices.getStore()) {
       throw new Error(`Cannot create local service '${id}' in global scope`);
+    } else if (definition.scope !== 'private') {
+      if (this.creating.has(id)) {
+        throw new Error(`Service '${id}' is already being created, is there perhaps a cyclic dependency?`);
+      }
+
+      this.creating.add(id);
     }
 
     return definition.async
@@ -145,26 +152,24 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   }
 
   private createInstanceSync<T>(id: string, definition: CompiledSyncServiceDefinition<T>): T {
-    if (!definition.factory) {
-      throw new Error(`Cannot create instance of dynamic service '${id}'`);
-    }
-
     const service = definition.factory(this);
     this.getStore(definition.scope)?.set(id, service);
-    this.runHook(definition, service, 'onCreate');
-    return service;
+    return this.instanceCreated(id, definition, service);
   }
 
   private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
     const servicePromise = Promise.resolve() // needed so that definition.factory() is never
       .then(() => definition.factory(this)) // called synchronously
-      .then((service) => {
-        this.runHook(definition, service, 'onCreate');
-        return service;
-      });
+      .then((service) => this.instanceCreated(id, definition, service));
 
     this.getStore(definition.scope)?.set(id, servicePromise);
     return servicePromise;
+  }
+
+  private instanceCreated<T>(id: string, definition: CompiledServiceDefinition<T>, service: T): T {
+    this.creating.delete(id);
+    this.runHook(definition, service, 'onCreate');
+    return service;
   }
 
   private runHook<T>(

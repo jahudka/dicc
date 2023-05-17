@@ -18,7 +18,7 @@
     "dicc": "dist/cli.js"
   },
   "dependencies": {
-    "dicc": "^0.0.5",
+    "dicc": "^0.0.6",
     "ts-morph": "^18.0",
     "typescript": "^5.0"
   },

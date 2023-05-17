@@ -48,13 +48,19 @@ export type CompiledAsyncServiceDefinition<T = any> = CompiledServiceDefinitionO
 };
 
 export type CompiledSyncServiceDefinition<T = any> = CompiledServiceDefinitionOptions<T> & {
-  factory: CompiledFactory<T> | null;
+  factory: CompiledFactory<T>;
+  async?: false;
+};
+
+export type CompiledDynamicServiceDefinition<T = any> = CompiledServiceDefinitionOptions<T> & {
+  factory: null;
   async?: false;
 };
 
 export type CompiledServiceDefinition<T = any> =
   | CompiledAsyncServiceDefinition<T>
-  | CompiledSyncServiceDefinition<T>;
+  | CompiledSyncServiceDefinition<T>
+  | CompiledDynamicServiceDefinition<T>;
 
 export type CompiledServiceDefinitionMap = {
   [id: string]: CompiledServiceDefinition;

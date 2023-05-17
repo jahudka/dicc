@@ -129,6 +129,109 @@ container.get('orm.userRepository');
 container.get('orm.commentRepository');
 ```
 
+Generic services behave the way you'd intuitively expect: `Service<A>` and
+`Service<B>` are treated as two completely distinct services, but multiple
+definitions with the `Service<A>` type will all be registered as services of the
+same type.
+
+You can also register _dynamic_ services using `createDefinition<T>(null)`. You
+must specify the type argument explicitly for dynamic services. Such services
+will be known to the compiler, and therefore it will be able to include the
+appropriate code to inject them into other services which may depend on them,
+but the container will not be able to create an instance of the service at
+runtime - instead, you will need to register it manually before you can fetch it
+from the container (and therefore before you can fetch any other service which
+depends on it directly). It doesn't sound very useful, but that's only until you
+read the next paragraph.
+
+When defining a service, you can specify some options for the service's runtime
+behavior as the second argument to `createDefinition`. The `options` object can
+be used to define some hooks for the service's lifecycle, and it can be used
+to specify a _scope_ in which a service should be available. There are three
+options:
+ - `global`, which is the default - Services in this scope will always be
+   instantiated only once, and that instance will be injected into everything
+   that depends on the service's type.
+ - `local` - Services in this scope will only be available inside a callback
+   passed to a `container.fork()` call and inside any asynchronous execution
+   chains started inside such a callback; a new instance of the service will be
+   created for each `container.fork()` call. For example, you could fork the
+   container for each HTTP request and define a dynamic service in the `local`
+   scope for the request object, and then inject an _accessor_ for this service
+   into your controllers or resolvers (which can therefore still be `global`,
+   because an accessor is not a direct dependency).
+ - `private` - This scope is for services which should not be remembered by the
+   container - each time such a service is fetched from the container, a new
+   instance will be created. There are those who say you should never create new
+   instances of objects in application code - in other words, that the `new`
+   keyword should only ever appear in the DI container. Private services allow
+   you to register something like `Date` as a service and then inject an
+   accessor anywhere you might want to call `new Date()`. Personally, I think
+   this is perhaps taking it a bit far, but even I can see how it might be
+   occasionally useful to be able to inject e.g. a slightly tuned-up `Date`
+   constructor into a test case.
+
+The available service hooks you can specify in the definition options are:
+ - `onCreate(service: T, container: Container): void` - This hook will be called
+   when the service has been created and registered. Note it works with dynamic
+   services as well - the hook will be called when the service is registered.
+ - `onFork(service: T, container: Container): T | undefined` - This hook will
+   be called at the start of a `container.fork()` call. The hook may return a
+   new instance of the service which will be used inside the forked async
+   execution chain, as if the service was defined in the `local` scope.
+   MikroORM's `EntityManager` comes to mind here.
+ - `onDestroy(service: T, container: Container): void` - This hook will be
+   called when a service is being destroyed. This will happen at the end of any
+   `container.fork()` call for all services in the `local` scope, as well as for
+   any instances returned from an `onFork` hook within the same fork call.
+
+
+### Specifying dependencies
+
+DICC facilitates automatic _constructor injection_, that is, it will analyse
+the constructors or factory functions of all defined services and generate
+a _compiled factory_ for each of them, which will call the original constructor
+or factory with the appropriate arguments. The compiler will only inject
+object types - it cannot automatically inject e.g. strings. It will also only
+inject arguments whose resolved object type matches one or more of the defined
+services or aliases. As I've mentioned before, types are resolved referentially,
+meaning that it is not enough that a service has the correct shape matching
+an argument's type, it must be explicitly defined using that type, either as the
+service's type, or as one of its aliases.
+
+When an argument's type cannot be resolved to something DICC understands, if the
+argument is optional, it is ignored, otherwise an error is thrown. Similarly,
+if an argument's type is resolved to something that DICC thinks is a service
+type, but no such service exists, then either the argument is ignored if it is
+optional, or an error is thrown. This all happens during compilation, so it
+should never happen that a service cannot be resolved at runtime (except with
+dynamic services, if you're not careful).
+
+When an argument is typed for a single instance of a given service type and
+there are multiple definitions matching that type, an error will be thrown
+during compilation. But you can inject multiple services of the same type in
+a few different ways:
+ - You can ask for an array of the desired service type (`T[]`). The requested
+   services will all need to be instantiated immediately to satisfy such a
+   dependency.
+ - You can ask for an iterable of the desired service type (`Iterable<T>`,
+   or `AsyncIterable<T>` if one or more of the requested services is async).
+   This has the benefit of creating each of the requested services lazily as you
+   iterate over the injected value.
+
+When you need two services to depend on each other - whether directly or
+indirectly through another service - you can break the cyclic dependency using
+one of the following patterns:
+ - Either request an _accessor_ for one of the services to be injected into the
+   other one - this is done by typing the dependency as `() => T`. Note that you
+   cannot call the accessor from within the service factory or constructor,
+   because while the factory / constructor is running, the service isn't fully
+   created yet, meaning the other service which depends on this service also
+   cannot be created.
+ - Or you can request a Promise for one of the services (regardless of whether
+   the target service is async or not). Since Promises cannot be awaited in
+   constructors, this is a safe way to deal with cyclic dependencies.
+
 
 ### Compiling a container
 
@@ -150,3 +253,27 @@ Example:
 ```shell
 node_modules/.bin/dicc -i src/di/definitions/index.ts -o src/di/index.ts
 ```
+
+The compiled container should be a deterministic product of your definitions,
+so you can safely exclude it from version control. But versioning it probably
+won't hurt anything, either, and at least you'll be able to see changes between
+compilations.
+
+
+### Obtaining services
+
+Ideally, you should write your code so that the only places where you explicitly
+touch the container are the entrypoints of your application. For example, your
+`app.ts` could look something like this:
+
+```typescript
+import { container } from './di';
+
+container.get('application').run();
+```
+
+Remember, a key attribute of dependency injection is that code doesn't know
+that there _is_ a DI container, and that includes obtaining services from the
+container. So the ideal way to write code is to wrap everything in services,
+specify inter-service dependencies as constructor parameters and have the DI
+inject the dependencies wherever you need them.

@@ -10,3 +10,19 @@ clean:
 
 dist:
 	../../node_modules/.bin/tsc
+
+.PHONY: major-release
+major-release:
+	npm version --no-git-tag-version major
+
+.PHONY: minor-release
+minor-release:
+	npm version --no-git-tag-version minor
+
+.PHONY: patch-release
+patch-release:
+	npm version --no-git-tag-version patch
+
+.PHONY: publish
+publish:
+	if node ../../utils/should-publish.mjs; then npm publish; fi
