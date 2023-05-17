@@ -1,3 +1,4 @@
+import { ServiceScope } from 'dicc';
 import { Type } from 'ts-morph';
 
 export interface DiccOptions {
@@ -12,6 +13,7 @@ export type ServiceDefinitionInfo = {
   type: Type;
   aliases: Type[];
   factory?: ServiceFactoryInfo;
+  scope: ServiceScope;
 };
 
 export type ServiceFactoryInfo = {

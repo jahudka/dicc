@@ -1,3 +1,4 @@
+import { ServiceScope } from 'dicc';
 import {
   CallExpression,
   Node,
@@ -76,10 +77,42 @@ export class DefinitionScanner {
 
   private analyseDefinition(id: string, definition: CallExpression, aliasArg?: TypeNode): void {
     const [typeArg] = definition.getTypeArguments();
-    const [factoryArg] = definition.getArguments();
+    const [factoryArg, optionsArg] = definition.getArguments();
     const aliases = this.helper.resolveAliases(aliasArg);
     const [type, factory] = this.resolveFactoryAndType(typeArg, factoryArg);
-    this.registry.register({ id, type, aliases, factory });
+    const scope = this.resolveServiceScope(optionsArg);
+    this.registry.register({ id, type, aliases, factory, scope });
+  }
+
+  private resolveServiceScope(optionsArg?: Node): ServiceScope {
+    if (!Node.isObjectLiteralExpression(optionsArg)) {
+      return 'global';
+    }
+
+    const scopeProp = optionsArg.getProperty('scope');
+
+    if (!scopeProp) {
+      return 'global';
+    } else if (!Node.isPropertyAssignment(scopeProp)) {
+      throw new Error(`The 'scope' option must be a simple property assignment`);
+    }
+
+    const initializer = scopeProp.getInitializer();
+
+    if (!Node.isStringLiteral(initializer)) {
+      throw new Error(`The 'scope' option must be initialised with a string literal`);
+    }
+
+    const scope = initializer.getLiteralValue();
+
+    switch (scope) {
+      case 'global':
+      case 'local':
+      case 'private':
+        return scope;
+      default:
+        throw new Error(`Invalid value for 'scope', must be one of 'global', 'local' or 'private'`);
+    }
   }
 
   private resolveFactoryAndType(typeArg?: TypeNode, factoryArg?: Node): [Type, ServiceFactoryInfo | undefined] {

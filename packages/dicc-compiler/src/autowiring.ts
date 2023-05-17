@@ -51,6 +51,10 @@ export class Autowiring {
       for (const candidate of candidates) {
         this.checkServiceDependencies(candidate);
 
+        if (definition.scope === 'global' && candidate.scope === 'local' && !(parameter.flags & TypeFlag.Accessor)) {
+          throw new Error(`Cannot inject locally-scoped service '${candidate.id}' into global service '${definition.id}'`);
+        }
+
         if (candidate.factory?.async && !(parameter.flags & TypeFlag.Async)) {
           if (parameter.flags & (TypeFlag.Accessor | TypeFlag.Iterable)) {
             throw new Error(`Cannot inject async service '${candidate.id}' into synchronous accessor or iterable parameter '${parameter.name}' of service '${definition.id}'`);

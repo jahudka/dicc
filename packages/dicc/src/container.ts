@@ -135,7 +135,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     if (!definition) {
       throw new Error(`Unknown service '${id}'`);
     } else if (!definition.factory) {
-      throw new Error(`Cannot create instance of dynamic service '${id}'`);
+      throw new Error(`Dynamic service '${id}' has not been registered`);
     } else if (definition.scope === 'local' && !this.localServices.getStore()) {
       throw new Error(`Cannot create local service '${id}' in global scope`);
     } else if (definition.scope !== 'private') {
