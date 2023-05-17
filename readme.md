@@ -36,7 +36,7 @@ container.
 The only place in your code you will ever `import { anything } from 'dicc'`
 will be inside the definition file (or files).
 
-### Highlights
+## Highlights
  - type-based autowiring, doesn't care about type or parameter names
  - supports multiple services of the same type
  - supports _async_ services (that is, services which need to be created
