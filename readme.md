@@ -46,6 +46,8 @@ will be inside the definition file (or files).
  - supports _dynamic_ services which are known to the container, but must be
    registered manually in order to be available as dependencies to other
    services
+ - compiles to regular TypeScript which you can easily examine to see what's
+   going on under the hood
  - on top of injecting simple dependencies, supports a few other injection
    schemes, based on the declared type of the argument being injected:
    - `Promise<T>` - will inject a Promise for an async service without waiting
