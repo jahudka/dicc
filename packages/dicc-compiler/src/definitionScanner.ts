@@ -7,7 +7,6 @@ import {
   ModuleDeclaration,
   Node,
   ObjectLiteralExpression,
-  Signature,
   SourceFile,
   Symbol,
   SyntaxKind,
@@ -16,7 +15,7 @@ import {
 } from 'ts-morph';
 import { ServiceRegistry } from './serviceRegistry';
 import { TypeHelper } from './typeHelper';
-import { ServiceFactoryInfo, ServiceFactoryParameter, TypeFlag } from './types';
+import { ServiceFactoryInfo, ServiceFactoryParameter } from './types';
 
 export class DefinitionScanner {
   private readonly registry: ServiceRegistry;
@@ -190,7 +189,7 @@ export class DefinitionScanner {
 
   private resolveFactoryAndType(typeArg?: TypeNode, factoryArg?: Node): [Type, ServiceFactoryInfo | undefined] {
     if (typeArg) {
-      const type = this.validateServiceType(...this.helper.resolveType(typeArg.getType()));
+      const [type] = this.helper.resolveServiceType(typeArg.getType());
       const info = Node.isNullLiteral(factoryArg) ? undefined : this.resolveFactoryInfo(
         factoryArg ? factoryArg.getType() : type,
       );
@@ -223,7 +222,7 @@ export class DefinitionScanner {
       throw new Error(`Multiple overloads on service factories aren't supported`);
     }
 
-    const [returnType, async] = this.resolveReturnType(signatures[0]);
+    const [returnType, async] = this.helper.resolveServiceType(signatures[0].getReturnType());
     const parameters = signatures[0].getParameters().map((param) => this.resolveParameter(param));
     return { parameters, returnType, constructable, async };
   }
@@ -234,18 +233,5 @@ export class DefinitionScanner {
     return type.isClassOrInterface() || type.isObject()
       ? { name, type, flags }
       : { name, flags };
-  }
-
-  private resolveReturnType(signature: Signature): [type: Type, async: boolean] {
-    const [type, flags] = this.helper.resolveType(signature.getReturnType());
-    return [this.validateServiceType(type, flags), Boolean(flags & TypeFlag.Async)];
-  }
-
-  private validateServiceType(type: Type, flags: TypeFlag): Type {
-    if (!type.isClassOrInterface() && !type.isObject() || (flags & ~TypeFlag.Async) !== TypeFlag.None) {
-      throw new Error(`Invalid service type, only classes, interfaces and object types are allowed`);
-    }
-
-    return type;
   }
 }

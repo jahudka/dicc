@@ -73,6 +73,19 @@ export class TypeHelper {
     return symbol === this.refs.createDefinition ? [expression, aliases] : [];
   }
 
+  resolveServiceType(type: Type): [type: Type, async: boolean] {
+    let async = false;
+
+    const target = this.resolveRootType(type);
+
+    if (target === this.refs.Promise) {
+      async = true;
+      type = type.getTypeArguments()[0];
+    }
+
+    return [type, async];
+  }
+
   resolveType(type: Type): [type: Type, flags: TypeFlag] {
     let flags: TypeFlag = TypeFlag.None;
 
