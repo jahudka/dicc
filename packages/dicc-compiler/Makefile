@@ -30,4 +30,4 @@ patch-release:
 
 .PHONY: publish
 publish:
-	if node ../../utils/should-publish.mjs; then npm publish; fi
+	../../node_modules/.bin/is-published || npm publish
