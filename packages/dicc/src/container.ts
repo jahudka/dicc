@@ -4,9 +4,9 @@ import {
   CompiledAsyncServiceDefinition,
   CompiledServiceDefinition,
   CompiledServiceDefinitionMap,
+  CompiledServiceForkHook,
   CompiledSyncServiceDefinition,
   GetService,
-  ServiceDefinitionOptions,
   ServiceScope,
 } from './types';
 
@@ -16,7 +16,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   private readonly aliases: Map<string, string[]>;
   private readonly globalServices: Store = new Store();
   private readonly localServices: AsyncLocalStorage<Store> = new AsyncLocalStorage();
-  private readonly forkHooks: Set<string> = new Set();
+  private readonly forkHooks: Map<string, CompiledServiceForkHook<any>> = new Map();
   private readonly creating: Set<string> = new Set();
 
   constructor(definitions: M) {
@@ -25,7 +25,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
 
     for (const [id, { aliases, onFork }] of this.definitions) {
       this.aliases.set(id, [id]);
-      onFork && this.forkHooks.add(id);
+      onFork && this.forkHooks.set(id, onFork);
 
       for (const alias of aliases) {
         this.aliases.has(alias) || this.aliases.set(alias, []);
@@ -66,9 +66,9 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     }
   }
 
-  register<K extends keyof M>(id: K, service: GetService<M, K>): void;
-  register<T>(id: string, service: T): void;
-  register<T>(id: string, service: T): void {
+  register<K extends keyof M>(id: K, service: GetService<M, K>): Promise<void> | void;
+  register<T>(id: string, service: T): Promise<void> | void;
+  register<T>(id: string, service: T): Promise<void> | void {
     const definition = this.definitions.get(id);
 
     if (!definition) {
@@ -86,16 +86,16 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     }
 
     store.set(id, service);
-    this.runHook(definition, service, 'onCreate');
+    return definition.onCreate && definition.onCreate(service, this);
   }
 
   async fork<R>(cb: () => Promise<R>): Promise<R> {
     const parent = this.currentStore;
     const store = new Store(parent);
 
-    for (const id of this.forkHooks) {
+    for (const [id, hook] of this.forkHooks) {
       if (parent.has(id)) {
-        const fork = this.runHook(this.definitions.get(id)!, parent.get(id), 'onFork');
+        const fork = await hook(parent.get(id), this);
         fork && store.set(id, fork);
       }
     }
@@ -105,7 +105,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     } finally {
       for (const [id, service] of store) {
         const definition = this.definitions.get(id);
-        definition && this.runHook(definition, service, 'onDestroy');
+        definition?.onDestroy && await definition.onDestroy(service, this);
         store.delete(id);
       }
     }
@@ -154,31 +154,22 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   private createInstanceSync<T>(id: string, definition: CompiledSyncServiceDefinition<T>): T {
     const service = definition.factory(this);
     this.getStore(definition.scope)?.set(id, service);
-    return this.instanceCreated(id, definition, service);
-  }
-
-  private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
-    const servicePromise = Promise.resolve() // needed so that definition.factory() is never
-      .then(() => definition.factory(this)) // called synchronously
-      .then((service) => this.instanceCreated(id, definition, service));
-
-    this.getStore(definition.scope)?.set(id, servicePromise);
-    return servicePromise;
-  }
-
-  private instanceCreated<T>(id: string, definition: CompiledServiceDefinition<T>, service: T): T {
+    definition.onCreate && definition.onCreate(service, this);
     this.creating.delete(id);
-    this.runHook(definition, service, 'onCreate');
     return service;
   }
 
-  private runHook<T>(
-    definition: ServiceDefinitionOptions<T>,
-    service: T,
-    type: 'onCreate' | 'onFork' | 'onDestroy',
-  ): T | undefined {
-    const hook = definition[type];
-    return hook ? hook(service, this) as T | undefined : undefined;
+  private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
+    const servicePromise = Promise.resolve()       // needed so that definition.factory()
+      .then(async () => definition.factory(this))  // is never called synchronously
+      .then(async (service) => {
+        definition.onCreate && await definition.onCreate(service, this);
+        this.creating.delete(id);
+        return service;
+      });
+
+    this.getStore(definition.scope)?.set(id, servicePromise);
+    return servicePromise;
   }
 
   private get currentStore(): Store {

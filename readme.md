@@ -90,37 +90,46 @@ npm i --save dicc
 
 Service definitions must all be exported from a single module. That module may
 re-export definitions from other modules, if it gets too large and you want to
-split it up. A simple service definition looks like this:
+split it up. A service is defined using a `satisfies` expression. A simple
+service definition might look like this:
 
 ```typescript
-import { createDefinition } from 'dicc';
+import { ServiceDefinition } from 'dicc';
 import { HttpServer } from 'insaner';
 
-export const httpServer = createDefinition(HttpServer);
+export const httpServer = HttpServer satisfies ServiceDefinition<HttpServer>;
 ```
 
-The first argument to the `createDefinition()` function is the _service
-factory_. This can be either a function which creates an instance of the
-service, or a constructable service class. The type of the service is the return
-type of the service factory (or the instance type of constructable classes).
+The value of the `satisfies` expression can be one of the following:
+ - a constructable class
+ - a factory function
+ - `null`
+ - an object literal with a `factory` property, which must be either
+   a constructable class, a factory function, or `null`; this allows specifying
+   other options when defining a service, more on that later
 
-Factory functions can be _async_ - meaning they can return a _Promise_ for an
-instance instead of the instance itself. This can be useful for some services
-which require asynchronous initialisation.
-
-Services can also be given _aliases_ - additional types the compiler should
-consider as being provided by the service. Think interfaces which the service
-implements. This is done using a `satisfies` expression:
+The `ServiceDefinition` type used in the `satisfies` expression tells the DICC
+compiler what type or types you want to register your service under. Its first
+type argument is the service type; whatever your factory function returns must
+be assignable to this type. The second type argument of `ServiceDefinition` is
+optional; you can use it to give the service one or more _aliases_ - additional
+types the compiler should consider as being provided by the service. Think
+interfaces which the service implements. For example:
 
 ```typescript
-export const httpServer = createDefinition(
-  HttpServer,
-) satisfies ServiceTypes<HttpServer, HttpServerInterface>;
+export const httpServer = HttpServer satisfies ServiceDefinition<
+  HttpServer,         // the service type
+  HttpServerInterface // an alias
+>;
 ```
 
 Multiple aliases can be specified as a tuple using
 `satisfies ServiceTypes<T, [A1, A2, A3]>`. Note that the service must actually
 conform to all the alias types.
+
+Factory functions can be _async_ - meaning they can return a _Promise_ for an
+instance instead of the instance itself. This can be useful for some services
+which require asynchronous initialisation.
 
 Public service IDs (meaning IDs you can safely use in your code to get services
 from the container) are derived from the path to the service definition in the
@@ -128,16 +137,18 @@ exported definition tree. For example:
 
 ```typescript
 // file: di/definitions/orm.ts
-export const userRepository = createDefinition(UserRepository);
-export const commentRepository = createDefinition(CommentRepository);
+export const repository = {
+  user: UserRepository satisfies ServiceDefinition<UserRepository>,
+  comment: CommentRepository satisfies ServiceDefinition<CommentRepository>,
+};
 
 // file: di/definitions/index.ts
 // this is the input file for DICC
 export * as orm from './orm';
 
 // the generated container will have these services:
-container.get('orm.userRepository');
-container.get('orm.commentRepository');
+container.get('orm.repository.user');
+container.get('orm.repository.comment');
 ```
 
 Generic services behave the way you'd intuitively expect: `Service<A>` and
@@ -145,24 +156,22 @@ Generic services behave the way you'd intuitively expect: `Service<A>` and
 definitions with the `Service<A>` type will all be registered as services of the
 same type.
 
-You can also register _dynamic_ services using `createDefinition<T>(null)`. You
-must specify the type argument explicitly for dynamic services. Such services
-will be known to the compiler, and therefore it will be able to include the
-appropriate code to inject them into other services which may depend on them,
-but the container will not be able to create an instance of the service at
-runtime - instead, you will need to register it manually before you can fetch it
-from the container (and therefore before you can fetch any other service which
-depends on it directly). It doesn't sound very useful, but that's only until you
-read the next paragraph.
+You can also register _dynamic_ services using `null satisfies ServiceDefinition<T>`.
+Such services will be known to the compiler, and therefore it will be able to
+include the appropriate code to inject them into other services which may depend
+on them, but the container will not be able to create an instance of the service
+at runtime - instead, you will need to register it manually before you can fetch
+it from the container (and therefore before you can fetch any other service
+which depends on it directly). It doesn't sound very useful, but that's only
+until you read the next paragraph.
 
-When defining a service, you can specify some options for the service's runtime
-behavior as the second argument to `createDefinition`. The `options` object can
-be used to define some hooks for the service's lifecycle, and it can be used
-to specify a _scope_ in which a service should be available. There are three
-options:
+When defining a service using an object literal, you can specify some options
+for the service's runtime behavior. These options can be used to define hooks
+for the service's lifecycle, and to specify a _scope_ in which a service should
+be available. There are three options for `scope`:
  - `global`, which is the default - Services in this scope will always be
    instantiated only once, and that instance will be injected into everything
-   that depends on the service's type.
+   that depends on the service's type or one of its aliases.
  - `local` - Services in this scope will only be available inside a callback
    passed to a `container.fork()` call and inside any asynchronous execution
    chains started inside such a callback; a new instance of the service will be
@@ -183,19 +192,23 @@ options:
    constructor into a test case.
 
 The available service hooks you can specify in the definition options are:
- - `onCreate(service: T, container: Container): void` - This hook will be called
-   when the service has been created and registered. Note it works with dynamic
-   services as well - the hook will be called when the service is registered.
- - `onFork(service: T, container: Container): T | undefined` - This hook will
-   be called at the start of a `container.fork()` call. The hook may return a
-   new instance of the service which will be used inside the forked async
-   execution chain, as if the service was defined in the `local` scope.
+ - `onCreate(service: T, ...args: any[]): Promise<void> | void` - This hook will
+   be called when the service has been created and registered. Note it works
+   with dynamic services as well - the hook will be called when the service is
+   registered. An async `onCreate` hook will make itself async as well.
+ - `onFork(service: T, ...args: any[]): Promise<T | undefined> | T | undefined` -
+   This hook will be called at the start of a `container.fork()` call. The hook
+   may return a new instance of the service which will be used inside the forked
+   async execution chain, as if the service was defined in the `local` scope.
    MikroORM's `EntityManager` comes to mind here.
- - `onDestroy(service: T, container: Container): void` - This hook will be
+ - `onDestroy(service: T, ...args: any[]): void` - This hook will be
    called when a service is being destroyed. This will happen at the end of any
    `container.fork()` call for all services in the `local` scope, as well as for
    any instances returned from an `onFork` hook within the same fork call.
 
+The first argument for each hook callback must always be the service instance,
+but you can specify other arguments and these will be injected from
+the container as usual.
 
 ### Specifying dependencies
 
@@ -203,11 +216,10 @@ DICC facilitates automatic _constructor injection_, that is, it will analyse
 the constructors or factory functions of all defined services and generate
 a _compiled factory_ for each of them, which will call the original constructor
 or factory with the appropriate arguments. The compiler will only inject
-object types - it cannot automatically inject e.g. strings. It will also only
-inject arguments whose resolved object type matches one or more of the defined
-services or aliases. As I've mentioned before, types are resolved referentially,
-meaning that it is not enough that a service has the correct shape matching
-an argument's type, it must be explicitly defined using that type, either as the
+arguments whose resolved object type matches one or more of the defined services
+or aliases. As I've mentioned before, types are resolved referentially, meaning
+that it is not enough that a service has the correct shape matching an
+argument's type, it must be explicitly defined using that type, either as the
 service's type, or as one of its aliases.
 
 When an argument's type cannot be resolved to something DICC understands, if the

@@ -21,6 +21,10 @@ export class ServiceRegistry {
     return this.definitions.has(id);
   }
 
+  get(id: string): ServiceDefinitionInfo {
+    return this.definitions.get(id)!;
+  }
+
   getDefinitions(): Iterable<ServiceDefinitionInfo> {
     return this.definitions.values();
   }

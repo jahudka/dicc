@@ -1,12 +1,13 @@
 import { ServiceScope } from 'dicc';
 import {
-  CallExpression,
   ExportedDeclarations,
   Expression,
   Identifier,
   ModuleDeclaration,
   Node,
   ObjectLiteralExpression,
+  SatisfiesExpression,
+  Signature,
   SourceFile,
   Symbol,
   SyntaxKind,
@@ -15,7 +16,7 @@ import {
 } from 'ts-morph';
 import { ServiceRegistry } from './serviceRegistry';
 import { TypeHelper } from './typeHelper';
-import { ServiceFactoryInfo, ServiceFactoryParameter } from './types';
+import { ParameterInfo, ServiceFactoryInfo, ServiceHooks, TypeFlag } from './types';
 
 export class DefinitionScanner {
   private readonly registry: ServiceRegistry;
@@ -29,10 +30,10 @@ export class DefinitionScanner {
   scanDefinitions(input: SourceFile): void {
     for (const [id, expression] of this.scanNode(input)) {
       try {
-        const [definition, aliases] = this.helper.extractDefinition(expression);
+        const [definition, type, aliases] = this.helper.extractDefinition(expression);
 
-        if (definition) {
-          this.analyseDefinition(id, definition, aliases);
+        if (definition && type) {
+          this.analyseDefinition(id, definition, type, aliases);
         }
       } catch (e: any) {
         throw new Error(`Invalid definition '${id}': ${e.message}`);
@@ -70,7 +71,7 @@ export class DefinitionScanner {
     }
   }
 
-  private * scanNode(node?: Node, path: string = ''): Iterable<[string, Expression]> {
+  private * scanNode(node?: Node, path: string = ''): Iterable<[string, SatisfiesExpression]> {
     if (Node.isSourceFile(node)) {
       yield * this.scanModule(node, path);
     } else if (Node.isModuleDeclaration(node) && node.hasNamespaceKeyword()) {
@@ -81,24 +82,24 @@ export class DefinitionScanner {
       yield * this.scanNode(node.getInitializer(), path);
     } else if (Node.isIdentifier(node)) {
       yield * this.scanIdentifier(node, path);
-    } else if (Node.isExpression(node)) {
+    } else if (Node.isSatisfiesExpression(node)) {
       yield [path.replace(/\.$/, ''), node];
     }
   }
 
-  private * scanModule(node: SourceFile | ModuleDeclaration, path: string = ''): Iterable<[string, Expression]> {
+  private * scanModule(node: SourceFile | ModuleDeclaration, path: string = ''): Iterable<[string, SatisfiesExpression]> {
     for (const [name, declarations] of node.getExportedDeclarations()) {
       yield * this.scanExportedDeclarations(declarations, `${path}${name}.`);
     }
   }
 
-  private * scanExportedDeclarations(declarations?: ExportedDeclarations[], path: string = ''): Iterable<[string, Expression]> {
+  private * scanExportedDeclarations(declarations?: ExportedDeclarations[], path: string = ''): Iterable<[string, SatisfiesExpression]> {
     for (const declaration of declarations ?? []) {
       yield * this.scanNode(declaration, path);
     }
   }
 
-  private * scanObject(node: ObjectLiteralExpression, path: string = ''): Iterable<[string, Expression]> {
+  private * scanObject(node: ObjectLiteralExpression, path: string = ''): Iterable<[string, SatisfiesExpression]> {
     for (const prop of node.getProperties()) {
       if (Node.isSpreadAssignment(prop)) {
         yield * this.scanNode(prop.getExpression(), path);
@@ -114,7 +115,7 @@ export class DefinitionScanner {
     }
   }
 
-  private * scanIdentifier(node: Identifier, path: string = ''): Iterable<[string, Expression]> {
+  private * scanIdentifier(node: Identifier, path: string = ''): Iterable<[string, SatisfiesExpression]> {
     for (const definition of node.getDefinitionNodes()) {
       if (Node.isNamespaceImport(definition)) {
         yield * this.scanModule(
@@ -147,21 +148,105 @@ export class DefinitionScanner {
     }
   }
 
-  private analyseDefinition(id: string, definition: CallExpression, aliasArg?: TypeNode): void {
-    const [typeArg] = definition.getTypeArguments();
-    const [factoryArg, optionsArg] = definition.getArguments();
+  private analyseDefinition(id: string, definition: Expression, typeArg: TypeNode, aliasArg?: TypeNode): void {
+    const type = typeArg.getType();
     const aliases = this.helper.resolveAliases(aliasArg);
-    const [type, factory] = this.resolveFactoryAndType(typeArg, factoryArg);
-    const scope = this.resolveServiceScope(optionsArg);
-    this.registry.register({ id, type, aliases, factory, scope });
+    const [factory, object] = this.resolveFactory(definition);
+    const hooks = this.resolveServiceHooks(definition);
+    const scope = this.resolveServiceScope(definition);
+    this.registry.register({ id, type, aliases, object, factory, hooks, scope });
   }
 
-  private resolveServiceScope(optionsArg?: Node): ServiceScope {
-    if (!Node.isObjectLiteralExpression(optionsArg)) {
+  private resolveFactory(definition: Expression): [factory?: ServiceFactoryInfo, object?: boolean] {
+    const [factory, object] = Node.isObjectLiteralExpression(definition)
+      ? [definition.getPropertyOrThrow('factory'), true]
+      : [definition, false];
+    return [this.resolveFactoryInfo(factory.getType()), object];
+  }
+
+  private resolveFactoryInfo(factoryType: Type): ServiceFactoryInfo | undefined {
+    if (factoryType.isNull()) {
+      return undefined;
+    }
+
+    const ctors = factoryType.getConstructSignatures();
+    const constructable = ctors.length > 0;
+    const signatures = [...ctors, ...factoryType.getCallSignatures()];
+
+    if (!signatures.length) {
+      if (!constructable) {
+        throw new Error(`No call or construct signatures found on service factory`);
+      }
+
+      return { constructable, parameters: [], returnType: factoryType };
+    } else if (signatures.length > 1) {
+      throw new Error(`Multiple overloads on service factories aren't supported`);
+    }
+
+    const [returnType, async] = this.helper.resolveServiceType(signatures[0].getReturnType());
+    const parameters = signatures[0].getParameters().map((param) => this.resolveParameter(param));
+    return { parameters, returnType, constructable, async };
+  }
+
+  private resolveServiceHooks(definition?: Expression): ServiceHooks {
+    if (!Node.isObjectLiteralExpression(definition)) {
+      return {};
+    }
+
+    const hooks: ServiceHooks = {};
+
+    for (const hook of ['onCreate', 'onFork', 'onDestroy'] as const) {
+      const signature = this.resolveHookSignature(hook, definition.getProperty(hook));
+
+      if (signature) {
+        const [, ...parameters] = signature.getParameters();
+
+        if (parameters.length) {
+          const [, flags] = this.helper.resolveType(signature.getReturnType());
+
+          hooks[hook] = {
+            parameters: parameters.map((p) => this.resolveParameter(p)),
+            async: Boolean(flags & TypeFlag.Async),
+          };
+        }
+      }
+    }
+
+    return hooks;
+  }
+
+  private resolveHookSignature(type: string, hook?: Node): Signature | undefined {
+    if (Node.isMethodDeclaration(hook)) {
+      return hook.getSignature();
+    } else if (Node.isPropertyAssignment(hook)) {
+      const hookValue = hook.getInitializer();
+
+      if (Node.isFunctionExpression(hookValue) || Node.isArrowFunction(hookValue)) {
+        return hookValue.getSignature();
+      }
+    }
+
+    if (!hook) {
+      return undefined;
+    }
+
+    throw new Error(`Invalid '${type}' hook, must be a method declaration or property assignment`);
+  }
+
+  private resolveParameter(symbol: Symbol): ParameterInfo {
+    const [type, flags] = this.helper.resolveType(symbol.getValueDeclarationOrThrow().getType());
+    const name = symbol.getName();
+    return type.isClassOrInterface() || type.isObject()
+      ? { name, type, flags }
+      : { name, flags };
+  }
+
+  private resolveServiceScope(definition?: Expression): ServiceScope {
+    if (!Node.isObjectLiteralExpression(definition)) {
       return 'global';
     }
 
-    const scopeProp = optionsArg.getProperty('scope');
+    const scopeProp = definition.getProperty('scope');
 
     if (!scopeProp) {
       return 'global';
@@ -185,53 +270,5 @@ export class DefinitionScanner {
       default:
         throw new Error(`Invalid value for 'scope', must be one of 'global', 'local' or 'private'`);
     }
-  }
-
-  private resolveFactoryAndType(typeArg?: TypeNode, factoryArg?: Node): [Type, ServiceFactoryInfo | undefined] {
-    if (typeArg) {
-      const [type] = this.helper.resolveServiceType(typeArg.getType());
-      const info = Node.isNullLiteral(factoryArg) ? undefined : this.resolveFactoryInfo(
-        factoryArg ? factoryArg.getType() : type,
-      );
-
-      return [type, info];
-    } else if (factoryArg) {
-      if (Node.isNullLiteral(factoryArg)) {
-        throw new Error(`Dynamic services require an explicit type argument`);
-      }
-
-      const info = this.resolveFactoryInfo(factoryArg.getType());
-      return [info.returnType, info];
-    } else {
-      throw new Error(`Neither service type nor factory provided`);
-    }
-  }
-
-  private resolveFactoryInfo(factoryType: Type): ServiceFactoryInfo {
-    const ctors = factoryType.getConstructSignatures();
-    const constructable = ctors.length > 0;
-    const signatures = [...ctors, ...factoryType.getCallSignatures()];
-
-    if (!signatures.length) {
-      if (!constructable) {
-        throw new Error(`No call or construct signatures found on service factory`);
-      }
-
-      return { constructable, parameters: [], returnType: factoryType };
-    } else if (signatures.length > 1) {
-      throw new Error(`Multiple overloads on service factories aren't supported`);
-    }
-
-    const [returnType, async] = this.helper.resolveServiceType(signatures[0].getReturnType());
-    const parameters = signatures[0].getParameters().map((param) => this.resolveParameter(param));
-    return { parameters, returnType, constructable, async };
-  }
-
-  private resolveParameter(symbol: Symbol): ServiceFactoryParameter {
-    const [type, flags] = this.helper.resolveType(symbol.getValueDeclarationOrThrow().getType());
-    const name = symbol.getName();
-    return type.isClassOrInterface() || type.isObject()
-      ? { name, type, flags }
-      : { name, flags };
   }
 }

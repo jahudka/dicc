@@ -12,18 +12,31 @@ export type ServiceDefinitionInfo = {
   id: string;
   type: Type;
   aliases: Type[];
+  object?: boolean;
   factory?: ServiceFactoryInfo;
+  hooks: ServiceHooks;
   scope: ServiceScope;
 };
 
 export type ServiceFactoryInfo = {
-  parameters: ServiceFactoryParameter[];
+  parameters: ParameterInfo[];
   returnType: Type;
   constructable?: boolean;
   async?: boolean;
 };
 
-export type ServiceFactoryParameter = {
+export type ServiceHooks = {
+  onCreate?: ServiceHookInfo;
+  onFork?: ServiceHookInfo;
+  onDestroy?: ServiceHookInfo;
+};
+
+export type ServiceHookInfo = {
+  parameters: ParameterInfo[];
+  async?: boolean;
+};
+
+export type ParameterInfo = {
   name: string;
   type?: Type;
   flags: TypeFlag;

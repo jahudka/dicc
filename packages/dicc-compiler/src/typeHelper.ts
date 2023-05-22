@@ -4,11 +4,10 @@ import {
   Node,
   SourceFile,
   SyntaxKind,
-  Symbol,
   Type,
   TypeNode,
   Expression,
-  PropertyName,
+  PropertyName, SatisfiesExpression,
 } from 'ts-morph';
 import { SourceFiles } from './sourceFiles';
 import { TypeFlag } from './types';
@@ -18,12 +17,11 @@ type ReferenceMap = {
   Iterable: Type;
   AsyncIterable: Type;
   Container: ClassDeclaration;
-  ServiceTypes: Type;
-  createDefinition: Symbol;
+  ServiceDefinition: Type;
 };
 
 const helperSource = `
-export { Container, ServiceTypes, createDefinition } from 'dicc';
+export { Container, ServiceDefinition } from 'dicc';
 export type TPromise<T> = Promise<T>;
 export type TIterable<T> = Iterable<T>;
 export type TAsyncIterable<T> = AsyncIterable<T>;
@@ -52,25 +50,16 @@ export class TypeHelper {
     }
   }
 
-  extractDefinition(expression?: Expression): [definition?: CallExpression, aliases?: TypeNode] {
-    let aliases: TypeNode | undefined;
+  extractDefinition(expression: SatisfiesExpression): [definition?: Expression, type?: TypeNode, aliases?: TypeNode] {
+    const satisfies = expression.getTypeNode();
 
-    if (Node.isSatisfiesExpression(expression)) {
-      const satisfies = expression.getTypeNode();
-
-      if (satisfies && Node.isTypeReference(satisfies) && this.resolveRootType(satisfies.getTypeName().getType()) === this.refs.ServiceTypes) {
-        [, aliases] = satisfies.getTypeArguments();
-      }
-
-      expression = expression.getExpression();
-    }
-
-    if (!Node.isCallExpression(expression)) {
+    if (!Node.isTypeReference(satisfies) || this.resolveRootType(satisfies.getTypeName().getType()) !== this.refs.ServiceDefinition) {
       return [];
     }
 
-    const symbol = expression.getExpression().getSymbol()?.getAliasedSymbol();
-    return symbol === this.refs.createDefinition ? [expression, aliases] : [];
+    const definition = expression.getExpression();
+    const [type, aliases] = satisfies.getTypeArguments();
+    return [definition, type, aliases];
   }
 
   resolveServiceType(type: Type): [type: Type, async: boolean] {
@@ -137,6 +126,8 @@ export class TypeHelper {
   resolveAliases(aliases?: TypeNode): Type[] {
     if (!aliases) {
       return [];
+    } else if (Node.isUndefinedKeyword(aliases)) {
+      return [];
     } else if (Node.isTupleTypeNode(aliases)) {
       return aliases.getElements().map((el) => el.getType());
     } else {
@@ -168,8 +159,7 @@ export class TypeHelper {
       Iterable: this.resolveRootType(src.get('TIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
       AsyncIterable: this.resolveRootType(src.get('TAsyncIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
       Container: src.get('Container')!.find(Node.isClassDeclaration)!,
-      ServiceTypes: this.resolveRootType(src.get('ServiceTypes')!.find(Node.isTypeAliasDeclaration)!.getType()),
-      createDefinition: src.get('createDefinition')!.find(Node.isFunctionDeclaration)!.getSymbolOrThrow(),
+      ServiceDefinition: this.resolveRootType(src.get('ServiceDefinition')!.find(Node.isTypeAliasDeclaration)!.getType()),
     };
   }
 

@@ -16,6 +16,10 @@ rebuild:
 	cd packages/dicc && make rebuild
 	cd packages/dicc-compiler && make rebuild
 
+.PHONY: self-compile
+self-compile:
+	cd packages/dicc-compiler && make compile
+
 .PHONY: publish
 publish:
 	cd packages/dicc && make publish
