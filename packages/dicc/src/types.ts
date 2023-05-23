@@ -29,45 +29,55 @@ export type ServiceDefinition<T extends Intersect<A>, A = undefined> =
 
 export type ServiceType<D> = D extends ServiceDefinition<infer T> ? T : never;
 
-export type CompiledServiceHook<T> = (service: T, container: Container) => void;
-export type CompiledAsyncServiceHook<T> = (service: T, container: Container) => Promise<void> | void;
-export type CompiledServiceForkHook<T> = (service: T, container: Container) => T | undefined;
+export type CompiledServiceHook<T, Services extends Record<string, any> = {}> = {
+  (service: T, container: Container<Services>): void;
+};
 
-export type CompiledServiceDefinitionOptions<T = any> = {
+export type CompiledAsyncServiceHook<T, Services extends Record<string, any> = {}> = {
+  (service: T, container: Container<Services>): Promise<void> | void;
+};
+
+export type CompiledServiceForkHook<T, Services extends Record<string, any> = {}> = {
+  (service: T, container: Container<Services>): Promise<T | undefined> | T | undefined;
+};
+
+export type CompiledServiceDefinitionOptions<T = any, Services extends Record<string, any> = {}> = {
   aliases: string[];
   scope?: ServiceScope;
-  onFork?: CompiledServiceForkHook<T>
-  onDestroy?: CompiledServiceHook<T> | CompiledAsyncServiceHook<T>;
+  onFork?: CompiledServiceForkHook<T, Services>;
+  onDestroy?: CompiledAsyncServiceHook<T, Services>;
 };
 
-export type CompiledFactory<T> = (container: Container) => T;
-
-export type CompiledAsyncServiceDefinition<T = any> = CompiledServiceDefinitionOptions<T> & {
-  factory: CompiledFactory<Promise<T>>;
-  async: true;
-  onCreate?: CompiledServiceHook<T>;
+export type CompiledFactory<T, Services extends Record<string, any> = {}> = {
+  (container: Container<Services>): T;
 };
 
-export type CompiledSyncServiceDefinition<T = any> = CompiledServiceDefinitionOptions<T> & {
-  factory: CompiledFactory<T>;
-  async?: false;
-  onCreate?: CompiledAsyncServiceHook<T>;
+export type CompiledAsyncServiceDefinition<T = any, Services extends Record<string, any> = {}>
+  = CompiledServiceDefinitionOptions<T, Services> & {
+    factory: CompiledFactory<Promise<T>, Services>;
+    async: true;
+    onCreate?: CompiledAsyncServiceHook<T, Services>;
+  };
+
+export type CompiledSyncServiceDefinition<T = any, Services extends Record<string, any> = {}>
+  = CompiledServiceDefinitionOptions<T, Services> & {
+    factory: CompiledFactory<T, Services>;
+    async?: false;
+    onCreate?: CompiledServiceHook<T, Services>;
+  };
+
+export type CompiledDynamicServiceDefinition<T = any, Services extends Record<string, any> = {}>
+  = CompiledServiceDefinitionOptions<T, Services> & {
+    factory: null;
+    async?: false;
+    onCreate?: CompiledAsyncServiceHook<T, Services>;
+  };
+
+export type CompiledServiceDefinition<T = any, Services extends Record<string, any> = {}> =
+  | CompiledAsyncServiceDefinition<T, Services>
+  | CompiledSyncServiceDefinition<T, Services>
+  | CompiledDynamicServiceDefinition<T, Services>;
+
+export type CompiledServiceDefinitionMap<Services extends Record<string, any> = {}> = {
+  [Id in keyof Services]: CompiledServiceDefinition<Services[Id]>;
 };
-
-export type CompiledDynamicServiceDefinition<T = any> = CompiledServiceDefinitionOptions<T> & {
-  factory: null;
-  async?: false;
-  onCreate?: CompiledAsyncServiceHook<T>;
-};
-
-export type CompiledServiceDefinition<T = any> =
-  | CompiledAsyncServiceDefinition<T>
-  | CompiledSyncServiceDefinition<T>
-  | CompiledDynamicServiceDefinition<T>;
-
-export type CompiledServiceDefinitionMap = {
-  [id: string]: CompiledServiceDefinition;
-};
-
-export type GetService<M extends CompiledServiceDefinitionMap, K extends keyof M>
-  = M[K] extends { factory: (...args: any[]) => infer S } ? S : never;

@@ -1,55 +1,82 @@
 import { CodeBlockWriter, SourceFile } from 'ts-morph';
 import { Autowiring } from './autowiring';
-import { ServiceDefinitionInfo, ParameterInfo, TypeFlag } from './types';
+import { ServiceRegistry } from './serviceRegistry';
+import { SourceFiles } from './sourceFiles';
+import { ServiceDefinitionInfo, ParameterInfo, TypeFlag, DiccOptions } from './types';
 
 export class Compiler {
+  private readonly registry: ServiceRegistry;
   private readonly autowiring: Autowiring;
-  private importServiceType: () => void = () => {};
+  private readonly input: SourceFile;
+  private readonly output: SourceFile;
+  private readonly options: DiccOptions;
 
-  constructor(autowiring: Autowiring) {
+  constructor(
+    registry: ServiceRegistry,
+    autowiring: Autowiring,
+    sourceFiles: SourceFiles,
+    options: DiccOptions,
+  ) {
+    this.registry = registry;
     this.autowiring = autowiring;
+    this.input = sourceFiles.getInput();
+    this.output = sourceFiles.getOutput();
+    this.options = options;
   }
 
-  compile(
-    definitions: Iterable<ServiceDefinitionInfo>,
-    input: SourceFile,
-    output: SourceFile,
-    exportName: string,
-  ): void {
-    output.replaceWithText('');
+  compile(): void {
+    const definitions = [...this.registry.getDefinitions()].sort((a, b) => a.id < b.id ? -1 : 1);
 
-    this.writeHeader(input, output);
+    this.output.replaceWithText('');
 
-    output.addStatements((writer) => {
-      writer.writeLine(`\nexport const ${exportName} = new Container({`);
+    this.writeHeader();
+    this.writeMap(definitions);
+    this.writeDefinitions(definitions);
+  }
+
+  private writeHeader(): void {
+    this.output.addImportDeclaration({
+      moduleSpecifier: 'dicc',
+      namedImports: [
+        { name: 'Container' },
+        { name: 'ServiceType' },
+      ],
+    });
+
+    this.output.addImportDeclaration({
+      moduleSpecifier: this.output.getRelativePathAsModuleSpecifierTo(this.input),
+      namespaceImport: 'defs',
+    });
+  }
+
+  private writeMap(definitions: ServiceDefinitionInfo[]): void {
+    this.output.addStatements((writer) => {
+      writer.writeLine(`\nexport interface ${this.options.map} {`);
 
       writer.indent(() => {
-        for (const definition of [...definitions].sort((a, b) => a.id < b.id ? -1 : 1)) {
+        for (const definition of definitions) {
+          writer.writeLine(`'${definition.id}': ServiceType<typeof defs.${definition.id}>;`);
+        }
+      });
+
+      writer.writeLine('}');
+    });
+  }
+
+  private writeDefinitions(
+    definitions: ServiceDefinitionInfo[],
+  ): void {
+    this.output.addStatements((writer) => {
+      writer.writeLine(`\nexport const ${this.options.export} = new Container<${this.options.map}>({`);
+
+      writer.indent(() => {
+        for (const definition of definitions) {
           this.compileDefinition(definition, writer);
         }
       });
 
       writer.writeLine('});\n');
     });
-  }
-
-  private writeHeader(input: SourceFile, output: SourceFile): void {
-    const diccImport = output.addImportDeclaration({
-      moduleSpecifier: 'dicc',
-      namedImports: [
-        { name: 'Container' },
-      ],
-    });
-
-    output.addImportDeclaration({
-      moduleSpecifier: output.getRelativePathAsModuleSpecifierTo(input),
-      namespaceImport: 'defs',
-    });
-
-    this.importServiceType = () => {
-      this.importServiceType = () => {};
-      diccImport.addNamedImport({ name: 'ServiceType' });
-    };
   }
 
   private compileDefinition(
@@ -67,9 +94,10 @@ export class Compiler {
       if (factory) {
         writer.conditionalWriteLine(factory.async, `async: true,`);
 
-        const params = this.compileParameters(factory.parameters);
-
-        if (!object || factory.constructable || params.length) {
+        if (!object && !factory.constructable && !factory.parameters.length) {
+          writer.writeLine(`factory: defs.${id},`);
+        } else if (!object || factory.constructable || factory.parameters.length) {
+          const params = this.compileParameters(factory.parameters);
           this.compileFactory(id, factory.async, factory.constructable, object, params, writer);
         }
       } else {
@@ -79,13 +107,8 @@ export class Compiler {
       for (const hook of ['onCreate', 'onFork', 'onDestroy'] as const) {
         const info = hooks[hook];
 
-        if (!info) {
-          continue;
-        }
-
-        const hookParams = this.compileParameters(info.parameters);
-
-        if (hookParams.length) {
+        if (info && info.parameters.length) {
+          const hookParams = this.compileParameters(info.parameters);
           this.compileHook(id, hook, info.async, hookParams, writer);
         }
       }
@@ -104,7 +127,7 @@ export class Compiler {
   ): void {
     writer.write(`factory: `);
     writer.conditionalWrite(async, 'async ');
-    writer.write(params.length ? '(di: Container) => ' : '() => ');
+    writer.write(params.length ? '(di) => ' : '() => ');
     writer.conditionalWrite(constructable, 'new ');
     writer.write(`defs.${id}${object ? '.factory' : ''}(`);
 
@@ -128,8 +151,9 @@ export class Compiler {
   ): void {
     writer.write(`${hook}: `);
     writer.conditionalWrite(async, 'async ');
-    writer.write(`(service: ServiceType<typeof defs.${id}>`);
-    writer.write(params.length ? ', di: Container) => ' : ') => ');
+    writer.write(`(service`);
+    writer.conditionalWrite(params.length > 0, ', di');
+    writer.write(') => ');
     writer.write(`defs.${id}.${hook}(`);
 
     writer.indent(() => {
@@ -141,8 +165,6 @@ export class Compiler {
     });
 
     writer.write('),\n');
-
-    this.importServiceType();
   }
 
   private compileParameters(parameters: ParameterInfo[]): string[] {

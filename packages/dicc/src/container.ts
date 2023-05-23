@@ -6,12 +6,11 @@ import {
   CompiledServiceDefinitionMap,
   CompiledServiceForkHook,
   CompiledSyncServiceDefinition,
-  GetService,
   ServiceScope,
 } from './types';
 
 
-export class Container<M extends CompiledServiceDefinitionMap = {}> {
+export class Container<Services extends Record<string, any> = {}> {
   private readonly definitions: Map<string, CompiledServiceDefinition>;
   private readonly aliases: Map<string, string[]>;
   private readonly globalServices: Store = new Store();
@@ -19,22 +18,13 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
   private readonly forkHooks: Map<string, CompiledServiceForkHook<any>> = new Map();
   private readonly creating: Set<string> = new Set();
 
-  constructor(definitions: M) {
-    this.definitions = new Map(Object.entries(definitions));
+  constructor(definitions: CompiledServiceDefinitionMap<Services>) {
+    this.definitions = new Map();
     this.aliases = new Map();
-
-    for (const [id, { aliases, onFork }] of this.definitions) {
-      this.aliases.set(id, [id]);
-      onFork && this.forkHooks.set(id, onFork);
-
-      for (const alias of aliases) {
-        this.aliases.has(alias) || this.aliases.set(alias, []);
-        this.aliases.get(alias)!.push(id);
-      }
-    }
+    this.importDefinitions(definitions);
   }
 
-  get<K extends keyof M>(id: K): GetService<M, K>;
+  get<K extends keyof Services>(id: K): Services[K];
   get<T>(id: string): T;
   get<T>(id: string): T {
     return this.getOrCreate(this.resolve(id));
@@ -44,7 +34,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     return this.resolve(alias, false).map((id) => this.getOrCreate(id));
   }
 
-  createAccessor<K extends keyof M>(id: K): () => GetService<M, K>;
+  createAccessor<K extends keyof Services>(id: K): () => Services[K];
   createAccessor<T>(id: string): () => T;
   createAccessor<T>(id: string): () => T {
     return () => this.get(id) as T;
@@ -66,7 +56,7 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
     }
   }
 
-  register<K extends keyof M>(id: K, service: GetService<M, K>): Promise<void> | void;
+  register<K extends keyof Services>(id: K, service: Services[K]): Promise<void> | void;
   register<T>(id: string, service: T): Promise<void> | void;
   register<T>(id: string, service: T): Promise<void> | void {
     const definition = this.definitions.get(id);
@@ -107,6 +97,19 @@ export class Container<M extends CompiledServiceDefinitionMap = {}> {
         const definition = this.definitions.get(id);
         definition?.onDestroy && await definition.onDestroy(service, this);
         store.delete(id);
+      }
+    }
+  }
+
+  private importDefinitions(definitions: CompiledServiceDefinitionMap<Services>): void {
+    for (const [id, definition] of Object.entries(definitions)) {
+      this.definitions.set(id, definition)
+      this.aliases.set(id, [id]);
+      definition.onFork && this.forkHooks.set(id, definition.onFork);
+
+      for (const alias of definition.aliases) {
+        this.aliases.has(alias) || this.aliases.set(alias, []);
+        this.aliases.get(alias)!.push(id);
       }
     }
   }

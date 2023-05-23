@@ -5,7 +5,8 @@ export interface DiccOptions {
   project?: string;
   input: string;
   output: string;
-  export?: string;
+  export: string;
+  map: string;
 }
 
 export type ServiceDefinitionInfo = {

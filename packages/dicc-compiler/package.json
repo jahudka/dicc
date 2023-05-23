@@ -9,7 +9,7 @@
     "ioc",
     "inversion of control"
   ],
-  "version": "0.0.8",
+  "version": "0.0.9",
   "license": "MIT",
   "files": [
     "dist"
@@ -18,7 +18,7 @@
     "dicc": "dist/cli.js"
   },
   "dependencies": {
-    "dicc": "^0.0.8",
+    "dicc": "^0.0.9",
     "ts-morph": "^18.0",
     "typescript": "^5.0"
   },

@@ -1,11 +1,6 @@
 import { Project, ScriptKind, SourceFile } from 'ts-morph';
 import { DiccOptions } from './types';
 
-const emptyOutputSource = `
-import { Container } from 'dicc';
-export const container = new Container({});
-`;
-
 export class SourceFiles {
   private readonly project: Project;
   private readonly input: SourceFile;
@@ -14,7 +9,7 @@ export class SourceFiles {
   constructor(project: Project, options: DiccOptions) {
     this.project = project;
     this.input = project.getSourceFileOrThrow(options.input);
-    this.output = project.createSourceFile(options.output, emptyOutputSource, {
+    this.output = project.createSourceFile(options.output, createEmptyOutput(options.map, options.export), {
       scriptKind: ScriptKind.TS,
       overwrite: true,
     });
@@ -34,4 +29,12 @@ export class SourceFiles {
       overwrite: true,
     });
   }
+}
+
+function createEmptyOutput(mapName: string, exportName: string): string {
+  return `
+import { Container } from 'dicc';
+export interface ${mapName} {}
+export const ${exportName} = new Container<${mapName}>({});
+`;
 }
