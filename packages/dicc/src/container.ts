@@ -63,7 +63,7 @@ export class Container<Services extends Record<string, any> = {}> {
 
     if (!definition) {
       throw new Error(`Unknown service '${id}'`);
-    } else if (definition.factory !== null) {
+    } else if (definition.factory !== undefined) {
       throw new Error(`Static service '${id}' cannot be registered dynamically`);
     }
 

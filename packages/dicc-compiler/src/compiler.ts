@@ -7,7 +7,6 @@ import { ServiceDefinitionInfo, ParameterInfo, TypeFlag, DiccOptions } from './t
 export class Compiler {
   private readonly registry: ServiceRegistry;
   private readonly autowiring: Autowiring;
-  private readonly input: SourceFile;
   private readonly output: SourceFile;
   private readonly options: DiccOptions;
 
@@ -19,22 +18,22 @@ export class Compiler {
   ) {
     this.registry = registry;
     this.autowiring = autowiring;
-    this.input = sourceFiles.getInput();
     this.output = sourceFiles.getOutput();
     this.options = options;
   }
 
   compile(): void {
     const definitions = [...this.registry.getDefinitions()].sort((a, b) => a.id < b.id ? -1 : 1);
+    const sources = new Map([...this.registry.getSources()].map((s, i) => [s, `defs${i}`]));
 
     this.output.replaceWithText('');
 
-    this.writeHeader();
-    this.writeMap(definitions);
-    this.writeDefinitions(definitions);
+    this.writeHeader(sources);
+    this.writeMap(definitions, sources);
+    this.writeDefinitions(definitions, sources);
   }
 
-  private writeHeader(): void {
+  private writeHeader(sources: Map<SourceFile, string>): void {
     this.output.addImportDeclaration({
       moduleSpecifier: 'dicc',
       namedImports: [
@@ -43,19 +42,21 @@ export class Compiler {
       ],
     });
 
-    this.output.addImportDeclaration({
-      moduleSpecifier: this.output.getRelativePathAsModuleSpecifierTo(this.input),
-      namespaceImport: 'defs',
-    });
+    for (const [source, name] of sources) {
+      this.output.addImportDeclaration({
+        moduleSpecifier: this.output.getRelativePathAsModuleSpecifierTo(source),
+        namespaceImport: name,
+      });
+    }
   }
 
-  private writeMap(definitions: ServiceDefinitionInfo[]): void {
+  private writeMap(definitions: ServiceDefinitionInfo[], sources: Map<SourceFile, string>): void {
     this.output.addStatements((writer) => {
       writer.writeLine(`\nexport interface ${this.options.map} {`);
 
       writer.indent(() => {
-        for (const definition of definitions) {
-          writer.writeLine(`'${definition.id}': ServiceType<typeof defs.${definition.id}>;`);
+        for (const { id, source } of definitions) {
+          writer.writeLine(`'${id}': ServiceType<typeof ${sources.get(source)}.${id}>;`);
         }
       });
 
@@ -65,13 +66,14 @@ export class Compiler {
 
   private writeDefinitions(
     definitions: ServiceDefinitionInfo[],
+    sources: Map<SourceFile, string>,
   ): void {
     this.output.addStatements((writer) => {
       writer.writeLine(`\nexport const ${this.options.export} = new Container<${this.options.map}>({`);
 
       writer.indent(() => {
         for (const definition of definitions) {
-          this.compileDefinition(definition, writer);
+          this.compileDefinition(sources.get(definition.source)!, definition, writer);
         }
       });
 
@@ -80,13 +82,14 @@ export class Compiler {
   }
 
   private compileDefinition(
+    source: string,
     { id, type, factory, object, hooks, aliases }: ServiceDefinitionInfo,
     writer: CodeBlockWriter,
   ): void {
     writer.writeLine(`'${id}': {`);
 
     writer.indent(() => {
-      object && writer.writeLine(`...defs.${id},`);
+      object && writer.writeLine(`...${source}.${id},`);
 
       const types = [type, ...aliases].map((t) => this.autowiring.getTypeId(t));
       writer.writeLine(`aliases: ['${types.join(`', '`)}'],`);
@@ -95,13 +98,13 @@ export class Compiler {
         writer.conditionalWriteLine(factory.async, `async: true,`);
 
         if (!object && !factory.constructable && !factory.parameters.length) {
-          writer.writeLine(`factory: defs.${id},`);
+          writer.writeLine(`factory: ${source}.${id},`);
         } else if (!object || factory.constructable || factory.parameters.length) {
           const params = this.compileParameters(factory.parameters);
-          this.compileFactory(id, factory.async, factory.constructable, object, params, writer);
+          this.compileFactory(source, id, factory.async, factory.constructable, object, params, writer);
         }
       } else {
-        writer.writeLine(`factory: null,`);
+        writer.writeLine(`factory: undefined,`);
       }
 
       for (const hook of ['onCreate', 'onFork', 'onDestroy'] as const) {
@@ -109,7 +112,7 @@ export class Compiler {
 
         if (info && info.parameters.length) {
           const hookParams = this.compileParameters(info.parameters);
-          this.compileHook(id, hook, info.async, hookParams, writer);
+          this.compileHook(source, id, hook, info.async, hookParams, writer);
         }
       }
     });
@@ -118,6 +121,7 @@ export class Compiler {
   }
 
   private compileFactory(
+    source: string,
     id: string,
     async: boolean | undefined,
     constructable: boolean | undefined,
@@ -129,7 +133,7 @@ export class Compiler {
     writer.conditionalWrite(async, 'async ');
     writer.write(params.length ? '(di) => ' : '() => ');
     writer.conditionalWrite(constructable, 'new ');
-    writer.write(`defs.${id}${object ? '.factory' : ''}(`);
+    writer.write(`${source}.${id}${object ? '.factory' : ''}(`);
 
     if (params.length) {
       writer.indent(() => {
@@ -143,6 +147,7 @@ export class Compiler {
   }
 
   private compileHook(
+    source: string,
     id: string,
     hook: string,
     async: boolean | undefined,
@@ -154,7 +159,7 @@ export class Compiler {
     writer.write(`(service`);
     writer.conditionalWrite(params.length > 0, ', di');
     writer.write(') => ');
-    writer.write(`defs.${id}.${hook}(`);
+    writer.write(`${source}.${id}.${hook}(`);
 
     writer.indent(() => {
       writer.writeLine('service,');

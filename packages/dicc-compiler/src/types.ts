@@ -1,5 +1,5 @@
 import { ServiceScope } from 'dicc';
-import { Type } from 'ts-morph';
+import { KindToNodeMappings, SourceFile, SyntaxKind, Type } from 'ts-morph';
 
 export interface DiccOptions {
   project?: string;
@@ -10,6 +10,7 @@ export interface DiccOptions {
 }
 
 export type ServiceDefinitionInfo = {
+  source: SourceFile;
   id: string;
   type: Type;
   aliases: Type[];
@@ -51,3 +52,23 @@ export enum TypeFlag {
   Async    = 0b01000,
   Accessor = 0b10000,
 }
+
+export type ReferenceSpecifier<T extends SyntaxKind = any> = {
+  module?: string;
+  kind: T;
+};
+
+export type ReferenceMap = {
+  [name: string]: ReferenceSpecifier;
+};
+
+export type ResolvedReference<S extends ReferenceSpecifier> =
+  S extends ReferenceSpecifier<infer K>
+  ? K extends SyntaxKind.TypeAliasDeclaration
+  ? Type
+  : KindToNodeMappings[K]
+  : never;
+
+export type ResolvedReferences<M extends ReferenceMap> = {
+  [N in keyof M]: ResolvedReference<M[N]>;
+};

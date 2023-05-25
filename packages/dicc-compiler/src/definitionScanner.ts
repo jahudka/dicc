@@ -30,10 +30,10 @@ export class DefinitionScanner {
   scanDefinitions(input: SourceFile): void {
     for (const [id, expression] of this.scanNode(input)) {
       try {
-        const [definition, type, aliases] = this.helper.extractDefinition(expression);
+        const [definition, type, aliases] = this.extractDefinitionParameters(expression);
 
         if (definition && type) {
-          this.analyseDefinition(id, definition, type, aliases);
+          this.registerDefinition(input, id, definition, type, aliases);
         }
       } catch (e: any) {
         throw new Error(`Invalid definition '${id}': ${e.message}`);
@@ -148,13 +148,25 @@ export class DefinitionScanner {
     }
   }
 
-  private analyseDefinition(id: string, definition: Expression, typeArg: TypeNode, aliasArg?: TypeNode): void {
+  private extractDefinitionParameters(expression: SatisfiesExpression): [definition?: Expression, type?: TypeNode, aliases?: TypeNode] {
+    const satisfies = expression.getTypeNode();
+
+    if (!this.helper.isServiceDefinition(satisfies)) {
+      return [];
+    }
+
+    const definition = expression.getExpression();
+    const [type, aliases] = satisfies.getTypeArguments();
+    return [definition, type, aliases];
+  }
+
+  private registerDefinition(source: SourceFile, id: string, definition: Expression, typeArg: TypeNode, aliasArg?: TypeNode): void {
     const type = typeArg.getType();
     const aliases = this.helper.resolveAliases(aliasArg);
     const [factory, object] = this.resolveFactory(definition);
     const hooks = this.resolveServiceHooks(definition);
     const scope = this.resolveServiceScope(definition);
-    this.registry.register({ id, type, aliases, object, factory, hooks, scope });
+    this.registry.register({ source, id, type, aliases, object, factory, hooks, scope });
   }
 
   private resolveFactory(definition: Expression): [factory?: ServiceFactoryInfo, object?: boolean] {
@@ -165,7 +177,7 @@ export class DefinitionScanner {
   }
 
   private resolveFactoryInfo(factoryType: Type): ServiceFactoryInfo | undefined {
-    if (factoryType.isNull()) {
+    if (factoryType.isUndefined()) {
       return undefined;
     }
 

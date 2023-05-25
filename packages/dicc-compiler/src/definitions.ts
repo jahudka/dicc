@@ -25,5 +25,5 @@ export const serviceRegistry = ServiceRegistry satisfies ServiceDefinition<Servi
 export const definitionScanner = DefinitionScanner satisfies ServiceDefinition<DefinitionScanner>;
 export const autowiring = Autowiring satisfies ServiceDefinition<Autowiring>;
 export const compiler = Compiler satisfies ServiceDefinition<Compiler>;
-export const options = null satisfies ServiceDefinition<DiccOptions>;
+export const options = undefined satisfies ServiceDefinition<DiccOptions>;
 export const dicc = Dicc satisfies ServiceDefinition<Dicc>;

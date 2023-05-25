@@ -1,43 +1,41 @@
 import {
   CallExpression,
-  ClassDeclaration,
   Node,
   SourceFile,
   SyntaxKind,
   Type,
   TypeNode,
-  Expression,
-  PropertyName, SatisfiesExpression,
+  PropertyName, TypeReferenceNode,
 } from 'ts-morph';
+import { ReferenceResolver } from './referenceResolver';
 import { SourceFiles } from './sourceFiles';
-import { TypeFlag } from './types';
+import { ReferenceMap, TypeFlag } from './types';
 
-type ReferenceMap = {
-  Promise: Type;
-  Iterable: Type;
-  AsyncIterable: Type;
-  Container: ClassDeclaration;
-  ServiceDefinition: Type;
-};
-
-const helperSource = `
-export { Container, ServiceDefinition } from 'dicc';
-export type TPromise<T> = Promise<T>;
-export type TIterable<T> = Iterable<T>;
-export type TAsyncIterable<T> = AsyncIterable<T>;
-`;
+const referenceSpecifiers = {
+  Container: { kind: SyntaxKind.ClassDeclaration, module: 'dicc' },
+  ServiceDefinition: { kind: SyntaxKind.TypeAliasDeclaration, module: 'dicc' },
+  'Promise<T>': { kind: SyntaxKind.TypeAliasDeclaration },
+  'Iterable<T>': { kind: SyntaxKind.TypeAliasDeclaration },
+  'AsyncIterable<T>': { kind: SyntaxKind.TypeAliasDeclaration },
+} as const satisfies ReferenceMap;
 
 export class TypeHelper {
   private readonly helper: SourceFile;
-  private readonly refs: ReferenceMap;
+  private readonly refs: ReferenceResolver<typeof referenceSpecifiers>;
+  private resolvers: number = 0;
 
   constructor(sourceFiles: SourceFiles) {
-    this.helper = sourceFiles.createHelper(helperSource);
-    this.refs = this.resolveBaseTypes();
+    this.helper = sourceFiles.getHelper();
+    this.refs = this.createReferenceResolver(referenceSpecifiers);
   }
 
   destroy(): void {
     this.helper.forget();
+  }
+
+  isServiceDefinition(node?: TypeNode): node is TypeReferenceNode {
+    return Node.isTypeReference(node)
+      && this.resolveRootType(node.getTypeName().getType()) === this.refs.get('ServiceDefinition');
   }
 
   resolveLiteralPropertyName(name: PropertyName): string | number | undefined {
@@ -50,24 +48,12 @@ export class TypeHelper {
     }
   }
 
-  extractDefinition(expression: SatisfiesExpression): [definition?: Expression, type?: TypeNode, aliases?: TypeNode] {
-    const satisfies = expression.getTypeNode();
-
-    if (!Node.isTypeReference(satisfies) || this.resolveRootType(satisfies.getTypeName().getType()) !== this.refs.ServiceDefinition) {
-      return [];
-    }
-
-    const definition = expression.getExpression();
-    const [type, aliases] = satisfies.getTypeArguments();
-    return [definition, type, aliases];
-  }
-
   resolveServiceType(type: Type): [type: Type, async: boolean] {
     let async = false;
 
     const target = this.resolveRootType(type);
 
-    if (target === this.refs.Promise) {
+    if (target === this.refs.get('Promise<T>')) {
       async = true;
       type = type.getTypeArguments()[0];
     }
@@ -100,13 +86,13 @@ export class TypeHelper {
 
     const target = this.resolveRootType(type);
 
-    if (target === this.refs.Promise) {
+    if (target === this.refs.get('Promise<T>')) {
       flags |= TypeFlag.Async;
       type = type.getTypeArguments()[0];
-    } else if (target === this.refs.Iterable) {
+    } else if (target === this.refs.get('Iterable<T>')) {
       flags |= TypeFlag.Iterable;
       type = type.getTypeArguments()[0];
-    } else if (target === this.refs.AsyncIterable) {
+    } else if (target === this.refs.get('AsyncIterable<T>')) {
       flags |= TypeFlag.Async | TypeFlag.Iterable;
       type = type.getTypeArguments()[0];
     }
@@ -135,8 +121,22 @@ export class TypeHelper {
     }
   }
 
+  resolveRootType(type: Type): Type {
+    let target: Type | undefined;
+
+    while ((target = type.getTargetType()) && target !== type) {
+      type = target;
+    }
+
+    return target ?? type;
+  }
+
+  createReferenceResolver<M extends ReferenceMap>(map: M): ReferenceResolver<M> {
+    return new ReferenceResolver(this, this.helper, ++this.resolvers, map);
+  }
+
   * getContainerMethodCalls(methodName: string): Iterable<CallExpression> {
-    const method = this.refs.Container.getInstanceMethodOrThrow(methodName);
+    const method = this.refs.get('Container').getInstanceMethodOrThrow(methodName);
 
     for (const r1 of method.findReferences()) {
       for (const r2 of r1.getReferences()) {
@@ -149,27 +149,5 @@ export class TypeHelper {
         }
       }
     }
-  }
-
-  private resolveBaseTypes(): ReferenceMap {
-    const src = this.helper.getExportedDeclarations();
-
-    return {
-      Promise: this.resolveRootType(src.get('TPromise')!.find(Node.isTypeAliasDeclaration)!.getType()),
-      Iterable: this.resolveRootType(src.get('TIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
-      AsyncIterable: this.resolveRootType(src.get('TAsyncIterable')!.find(Node.isTypeAliasDeclaration)!.getType()),
-      Container: src.get('Container')!.find(Node.isClassDeclaration)!,
-      ServiceDefinition: this.resolveRootType(src.get('ServiceDefinition')!.find(Node.isTypeAliasDeclaration)!.getType()),
-    };
-  }
-
-  private resolveRootType(type: Type): Type {
-    let target: Type | undefined;
-
-    while ((target = type.getTargetType()) && target !== type) {
-      type = target;
-    }
-
-    return target ?? type;
   }
 }

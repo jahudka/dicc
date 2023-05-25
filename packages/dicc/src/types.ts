@@ -14,7 +14,7 @@ export type ServiceHook<T> = (service: T, ...args: any[]) => Promise<void> | voi
 export type ServiceForkHook<T> = (service: T, ...args: any[]) => Promise<T | undefined> | T | undefined;
 
 export type ServiceDefinitionOptions<T = any> = {
-  factory: Constructor<T> | Factory<Promise<T> | T> | null;
+  factory: Constructor<T> | Factory<Promise<T> | T> | undefined;
   scope?: ServiceScope;
   onCreate?: ServiceHook<T>;
   onFork?: ServiceForkHook<T>;
@@ -24,7 +24,7 @@ export type ServiceDefinitionOptions<T = any> = {
 export type ServiceDefinition<T extends Intersect<A>, A = undefined> =
   | Constructor<T>
   | Factory<Promise<T> | T>
-  | null
+  | undefined
   | ServiceDefinitionOptions<T>;
 
 export type ServiceType<D> = D extends ServiceDefinition<infer T> ? T : never;
@@ -68,7 +68,7 @@ export type CompiledSyncServiceDefinition<T = any, Services extends Record<strin
 
 export type CompiledDynamicServiceDefinition<T = any, Services extends Record<string, any> = {}>
   = CompiledServiceDefinitionOptions<T, Services> & {
-    factory: null;
+    factory: undefined;
     async?: false;
     onCreate?: CompiledAsyncServiceHook<T, Services>;
   };

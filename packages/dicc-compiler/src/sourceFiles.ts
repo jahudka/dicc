@@ -2,14 +2,17 @@ import { Project, ScriptKind, SourceFile } from 'ts-morph';
 import { DiccOptions } from './types';
 
 export class SourceFiles {
-  private readonly project: Project;
   private readonly input: SourceFile;
   private readonly output: SourceFile;
+  private readonly helper: SourceFile;
 
   constructor(project: Project, options: DiccOptions) {
-    this.project = project;
     this.input = project.getSourceFileOrThrow(options.input);
     this.output = project.createSourceFile(options.output, createEmptyOutput(options.map, options.export), {
+      scriptKind: ScriptKind.TS,
+      overwrite: true,
+    });
+    this.helper = project.createSourceFile('@dicc-helper.d.ts', '', {
       scriptKind: ScriptKind.TS,
       overwrite: true,
     });
@@ -23,11 +26,8 @@ export class SourceFiles {
     return this.output;
   }
 
-  createHelper(source: string): SourceFile {
-    return this.project.createSourceFile('@dicc-helper.d.ts', source, {
-      scriptKind: ScriptKind.TS,
-      overwrite: true,
-    });
+  getHelper(): SourceFile {
+    return this.helper;
   }
 }
 

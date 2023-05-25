@@ -1,14 +1,16 @@
-import { Type } from 'ts-morph';
+import { SourceFile, Type } from 'ts-morph';
 import { ServiceDefinitionInfo } from './types';
 
 export class ServiceRegistry {
   private readonly definitions: Map<string, ServiceDefinitionInfo> = new Map();
+  private readonly sources: Set<SourceFile> = new Set();
   private readonly types: Map<Type, string> = new Map();
   private readonly aliases: Map<string, Set<string>> = new Map();
   private readonly ids: Set<string> = new Set();
 
   register(definition: ServiceDefinitionInfo): void {
     this.definitions.set(definition.id, definition);
+    this.sources.add(definition.source);
     this.registerAlias(definition.id, definition.id);
     this.registerAlias(definition.id, this.registerType(definition.type));
 
@@ -23,6 +25,10 @@ export class ServiceRegistry {
 
   get(id: string): ServiceDefinitionInfo {
     return this.definitions.get(id)!;
+  }
+
+  getSources(): Iterable<SourceFile> {
+    return this.sources;
   }
 
   getDefinitions(): Iterable<ServiceDefinitionInfo> {
