@@ -10,7 +10,7 @@ export type Intersect<Types> =
   : Types;
 
 export type MaybeOptional<T, Need extends boolean>
-  = T extends (infer V) | undefined ? Need extends false ? V | undefined : T : T;
+  = T extends undefined ? Need extends false ? T : Exclude<T, undefined> : Exclude<T, undefined>;
 
 export type GetResult<Services extends Record<string, any>, K extends keyof Services, Need extends boolean>
   = Services[K] extends Promise<infer T> ? Promise<MaybeOptional<T, Need>> : MaybeOptional<Services[K], Need>;
