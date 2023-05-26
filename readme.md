@@ -156,14 +156,28 @@ Generic services behave the way you'd intuitively expect: `Service<A>` and
 definitions with the `Service<A>` type will all be registered as services of the
 same type.
 
-You can also register _dynamic_ services using `null satisfies ServiceDefinition<T>`.
+You can also register _dynamic_ services using `undefined satisfies ServiceDefinition<T>`.
 Such services will be known to the compiler, and therefore it will be able to
 include the appropriate code to inject them into other services which may depend
 on them, but the container will not be able to create an instance of the service
 at runtime - instead, you will need to register it manually before you can fetch
 it from the container (and therefore before you can fetch any other service
-which depends on it directly). It doesn't sound very useful, but that's only
-until you read the next paragraph.
+which depends on it directly). When retrieving collections of services, dynamic
+services which haven't been registered yet will be silently ignored.
+
+Service factories can return `undefined`. This can be used to make services
+_optional_. By default, all services are _required_ - meaning that whenever you
+attempt to obtain a defined service from the container and the service wasn't
+manually registered and cannot be created, an error is thrown. But there are
+some scenarios where you might want to be able to define a service during
+compilation and then decide at runtime that the service shouldn't actually be
+created - for example you can have multiple log handlers, and you may want to
+only use those for which you have the necessary configuration available at
+runtime (e.g. from `.env` or similar). Optional services are optional only in
+a couple of contexts: either in a `container.get()` call where you pass `false`
+as the second argument (in that case the method will return `T | undefined` for
+any optional service), or when retrieving collections of services (in which case
+optional services whose factory returned `undefined` will be silently ignored).
 
 When defining a service using an object literal, you can specify some options
 for the service's runtime behavior. These options can be used to define hooks

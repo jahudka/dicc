@@ -9,12 +9,28 @@ export type Intersect<Types> =
   ? Types extends [infer I, ...infer R] ? I & Intersect<R> : {}
   : Types;
 
+export type MaybeOptional<T, Need extends boolean>
+  = T extends (infer V) | undefined ? Need extends false ? V | undefined : T : T;
+
+export type GetResult<Services extends Record<string, any>, K extends keyof Services, Need extends boolean>
+  = Services[K] extends Promise<infer T> ? Promise<MaybeOptional<T, Need>> : MaybeOptional<Services[K], Need>;
+
+export type FindResult<Services extends Record<string, any>, K extends keyof Services>
+  = [Services[K]] extends [Promise<infer T>]
+    ? Promise<Exclude<T, undefined>[]>
+    : Exclude<Services[K], undefined>[];
+
+export type IterateResult<Services extends Record<string, any>, K extends keyof Services>
+  = [Services[K]] extends [Promise<infer T>]
+    ? AsyncIterable<Exclude<T, undefined>>
+    : Iterable<Exclude<Services[K], undefined>>;
+
 export type ServiceScope = 'global' | 'local' | 'private';
 export type ServiceHook<T> = (service: T, ...args: any[]) => Promise<void> | void;
 export type ServiceForkHook<T> = (service: T, ...args: any[]) => Promise<T | undefined> | T | undefined;
 
 export type ServiceDefinitionOptions<T = any> = {
-  factory: Constructor<T> | Factory<Promise<T> | T> | undefined;
+  factory: Constructor<T> | Factory<Promise<T | undefined> | T | undefined> | undefined;
   scope?: ServiceScope;
   onCreate?: ServiceHook<T>;
   onFork?: ServiceForkHook<T>;
@@ -23,11 +39,15 @@ export type ServiceDefinitionOptions<T = any> = {
 
 export type ServiceDefinition<T extends Intersect<A>, A = undefined> =
   | Constructor<T>
-  | Factory<Promise<T> | T>
+  | Factory<Promise<T | undefined> | T | undefined>
   | undefined
   | ServiceDefinitionOptions<T>;
 
-export type ServiceType<D> = D extends ServiceDefinition<infer T> ? T : never;
+export type ServiceType<D> =
+  D extends Factory<Promise<infer T> | infer T> ? T
+  : D extends { factory: Factory<Promise<infer T> | infer T> } ? T
+  : D extends ServiceDefinition<infer T> ? T
+  : never;
 
 export type CompiledServiceHook<T, Services extends Record<string, any> = {}> = {
   (service: T, container: Container<Services>): void;
@@ -53,24 +73,24 @@ export type CompiledFactory<T, Services extends Record<string, any> = {}> = {
 };
 
 export type CompiledAsyncServiceDefinition<T = any, Services extends Record<string, any> = {}>
-  = CompiledServiceDefinitionOptions<T, Services> & {
+  = CompiledServiceDefinitionOptions<NonNullable<T>, Services> & {
     factory: CompiledFactory<Promise<T>, Services>;
     async: true;
-    onCreate?: CompiledAsyncServiceHook<T, Services>;
+    onCreate?: CompiledAsyncServiceHook<NonNullable<T>, Services>;
   };
 
 export type CompiledSyncServiceDefinition<T = any, Services extends Record<string, any> = {}>
-  = CompiledServiceDefinitionOptions<T, Services> & {
+  = CompiledServiceDefinitionOptions<NonNullable<T>, Services> & {
     factory: CompiledFactory<T, Services>;
     async?: false;
-    onCreate?: CompiledServiceHook<T, Services>;
+    onCreate?: CompiledServiceHook<NonNullable<T>, Services>;
   };
 
 export type CompiledDynamicServiceDefinition<T = any, Services extends Record<string, any> = {}>
-  = CompiledServiceDefinitionOptions<T, Services> & {
+  = CompiledServiceDefinitionOptions<NonNullable<T>, Services> & {
     factory: undefined;
-    async?: false;
-    onCreate?: CompiledAsyncServiceHook<T, Services>;
+    async?: boolean;
+    onCreate?: CompiledAsyncServiceHook<NonNullable<T>, Services>;
   };
 
 export type CompiledServiceDefinition<T = any, Services extends Record<string, any> = {}> =
@@ -79,5 +99,6 @@ export type CompiledServiceDefinition<T = any, Services extends Record<string, a
   | CompiledDynamicServiceDefinition<T, Services>;
 
 export type CompiledServiceDefinitionMap<Services extends Record<string, any> = {}> = {
-  [Id in keyof Services]: CompiledServiceDefinition<Services[Id]>;
+  [Id in keyof Services]?: Services[Id] extends Promise<infer S> ? CompiledAsyncServiceDefinition<S, Services>
+    : CompiledSyncServiceDefinition<Services[Id], Services> | CompiledDynamicServiceDefinition<Services[Id], Services>;
 };

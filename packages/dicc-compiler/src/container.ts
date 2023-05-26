@@ -11,6 +11,15 @@ export interface Services {
   'serviceRegistry': ServiceType<typeof defs0.serviceRegistry>;
   'sourceFiles': ServiceType<typeof defs0.sourceFiles>;
   'typeHelper': ServiceType<typeof defs0.typeHelper>;
+  'Autowiring.0': ServiceType<typeof defs0.autowiring>
+  'Compiler.0': ServiceType<typeof defs0.compiler>
+  'DefinitionScanner.0': ServiceType<typeof defs0.definitionScanner>
+  'Dicc.0': ServiceType<typeof defs0.dicc>
+  'DiccOptions.0': ServiceType<typeof defs0.options>
+  'Project.0': ServiceType<typeof defs0.project>
+  'ServiceRegistry.0': ServiceType<typeof defs0.serviceRegistry>
+  'SourceFiles.0': ServiceType<typeof defs0.sourceFiles>
+  'TypeHelper.0': ServiceType<typeof defs0.typeHelper>
 }
 
 export const container = new Container<Services>({

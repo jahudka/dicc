@@ -6,8 +6,12 @@ import {
   CompiledServiceDefinitionMap,
   CompiledServiceForkHook,
   CompiledSyncServiceDefinition,
+  FindResult,
+  GetResult,
+  IterateResult,
   ServiceScope,
 } from './types';
+import { isAsyncIterable, isIterable, isPromiseLike } from './utils';
 
 
 export class Container<Services extends Record<string, any> = {}> {
@@ -24,41 +28,42 @@ export class Container<Services extends Record<string, any> = {}> {
     this.importDefinitions(definitions);
   }
 
-  get<K extends keyof Services>(id: K): Services[K];
-  get<T>(id: string): T;
-  get<T>(id: string): T {
-    return this.getOrCreate(this.resolve(id));
+  get<K extends keyof Services>(id: K): GetResult<Services, K, true>;
+  get<K extends keyof Services, Need extends boolean>(id: K, need: Need): GetResult<Services, K, Need>;
+  get(id: string, need: boolean = true): any {
+    return this.getOrCreate(this.resolve(id), need);
   }
 
-  find<T>(alias: string): T[] {
-    return this.resolve(alias, false).map((id) => this.getOrCreate(id));
+  iterate<K extends keyof Services>(alias: K): IterateResult<Services, K>;
+  iterate(alias: string): Iterable<any> | AsyncIterable<any> {
+    const ids = this.resolve(alias, false);
+    const async = ids.some((id) => this.definitions.get(id)?.async);
+    return async ? this.createAsyncIterator(alias) : this.createIterator(alias);
   }
 
-  createAccessor<K extends keyof Services>(id: K): () => Services[K];
-  createAccessor<T>(id: string): () => T;
-  createAccessor<T>(id: string): () => T {
-    return () => this.get(id) as T;
-  }
+  find<K extends keyof Services>(alias: K): FindResult<Services, K>;
+  find(alias: string): Promise<any[]> | any[] {
+    const iterable = this.iterate(alias);
 
-  createListAccessor<T>(id: string): () => T[] {
-    return () => this.find(id);
-  }
+    if (isAsyncIterable(iterable)) {
+      return Promise.resolve().then(async () => {
+        const values: any[] = [];
 
-  * createIterator<T>(id: string): Iterable<T> {
-    for (const i of this.resolve(id, false)) {
-      yield this.get(i) as T;
+        for await (const value of iterable) {
+          values.push(value);
+        }
+
+        return values;
+      });
+    } else if (isIterable(iterable)) {
+      return [...iterable];
+    } else {
+      throw new Error(`This should be unreachable!`);
     }
   }
 
-  async * createAsyncIterator<T>(id: string): AsyncIterable<T> {
-    for (const i of this.resolve(id, false)) {
-      yield await this.get(i) as T;
-    }
-  }
-
-  register<K extends keyof Services>(id: K, service: Services[K]): Promise<void> | void;
-  register<T>(id: string, service: T): Promise<void> | void;
-  register<T>(id: string, service: T): Promise<void> | void {
+  register<K extends keyof Services>(id: K, service: Services[K]): PromiseLike<void> | void;
+  register(id: string, service: any): PromiseLike<void> | void {
     const definition = this.definitions.get(id);
 
     if (!definition) {
@@ -76,7 +81,14 @@ export class Container<Services extends Record<string, any> = {}> {
     }
 
     store.set(id, service);
-    return definition.onCreate && definition.onCreate(service, this);
+
+    if (isPromiseLike(service)) {
+      return service.then(async (instance) => {
+        definition.onCreate && await definition.onCreate(instance, this);
+      });
+    } else {
+      return definition.onCreate && definition.onCreate(service, this);
+    }
   }
 
   async fork<R>(cb: () => Promise<R>): Promise<R> {
@@ -114,6 +126,26 @@ export class Container<Services extends Record<string, any> = {}> {
     }
   }
 
+  * createIterator<T>(alias: string): Iterable<T> {
+    for (const id of this.resolve(alias, false)) {
+      const service = this.getOrCreate(id, false);
+
+      if (service !== undefined) {
+        yield service;
+      }
+    }
+  }
+
+  async * createAsyncIterator<T>(alias: string): AsyncIterable<T> {
+    for (const id of this.resolve(alias, false)) {
+      const service = await this.getOrCreate(id, false) as T;
+
+      if (service) {
+        yield service;
+      }
+    }
+  }
+
   private resolve(alias: string, single?: true): string;
   private resolve(alias: string, single: false): string[];
   private resolve(alias: string, single: boolean = true): string[] | string {
@@ -128,17 +160,21 @@ export class Container<Services extends Record<string, any> = {}> {
     return single ? ids[0] : ids;
   }
 
-  private getOrCreate(id: string): any {
-    return this.currentStore.get(id) ?? this.create(id);
+  private getOrCreate(id: string, need: boolean = true): any {
+    return this.currentStore.has(id) ? this.currentStore.get(id) : this.create(id, need);
   }
 
-  private create(id: string): any {
+  private create(id: string, need: boolean = true): any {
     const definition = this.definitions.get(id);
 
     if (!definition) {
       throw new Error(`Unknown service '${id}'`);
     } else if (!definition.factory) {
-      throw new Error(`Dynamic service '${id}' has not been registered`);
+      if (need) {
+        throw new Error(`Dynamic service '${id}' has not been registered`);
+      }
+
+      return undefined;
     } else if (definition.scope === 'local' && !this.localServices.getStore()) {
       throw new Error(`Cannot create local service '${id}' in global scope`);
     } else if (definition.scope !== 'private') {
@@ -150,24 +186,34 @@ export class Container<Services extends Record<string, any> = {}> {
     }
 
     return definition.async
-      ? this.createInstanceAsync(id, definition)
-      : this.createInstanceSync(id, definition);
+      ? this.createInstanceAsync(id, definition, need)
+      : this.createInstanceSync(id, definition, need);
   }
 
-  private createInstanceSync<T>(id: string, definition: CompiledSyncServiceDefinition<T>): T {
+  private createInstanceSync<T>(id: string, definition: CompiledSyncServiceDefinition<T>, need: boolean = true): T | undefined {
     const service = definition.factory(this);
     this.getStore(definition.scope)?.set(id, service);
-    definition.onCreate && definition.onCreate(service, this);
+    service && definition.onCreate && definition.onCreate(service, this);
     this.creating.delete(id);
+
+    if (!service && need) {
+      throw new Error(`Unable to create required service '${id}'`);
+    }
+
     return service;
   }
 
-  private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>): Promise<T> {
+  private createInstanceAsync<T>(id: string, definition: CompiledAsyncServiceDefinition<T>, need: boolean = true): Promise<T | undefined> {
     const servicePromise = Promise.resolve()       // needed so that definition.factory()
       .then(async () => definition.factory(this))  // is never called synchronously
       .then(async (service) => {
-        definition.onCreate && await definition.onCreate(service, this);
+        service && definition.onCreate && await definition.onCreate(service, this);
         this.creating.delete(id);
+
+        if (!service && need) {
+          throw new Error(`Unable to create required service '${id}'`);
+        }
+
         return service;
       });
 

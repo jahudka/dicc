@@ -2,7 +2,7 @@ import { CodeBlockWriter, SourceFile } from 'ts-morph';
 import { Autowiring } from './autowiring';
 import { ServiceRegistry } from './serviceRegistry';
 import { SourceFiles } from './sourceFiles';
-import { ServiceDefinitionInfo, ParameterInfo, TypeFlag, DiccOptions } from './types';
+import { DiccOptions, ParameterInfo, ServiceDefinitionInfo, TypeFlag } from './types';
 
 export class Compiler {
   private readonly registry: ServiceRegistry;
@@ -54,9 +54,35 @@ export class Compiler {
     this.output.addStatements((writer) => {
       writer.writeLine(`\nexport interface ${this.options.map} {`);
 
+      const aliasMap: Map<string, string[]> = new Map();
+
       writer.indent(() => {
-        for (const { id, source } of definitions) {
-          writer.writeLine(`'${id}': ServiceType<typeof ${sources.get(source)}.${id}>;`);
+        for (const { source, id, type, aliases, factory } of definitions) {
+          const serviceType = `ServiceType<typeof ${sources.get(source)}.${id}>`;
+          const fullType = factory?.async ? `Promise<${serviceType}>` : serviceType;
+          writer.writeLine(`'${id}': ${fullType};`);
+
+          for (const typeAlias of [type, ...aliases]) {
+            const alias = this.registry.getTypeId(typeAlias);
+
+            if (alias !== undefined) {
+              aliasMap.has(alias) || aliasMap.set(alias, []);
+              aliasMap.get(alias)!.push(fullType);
+            }
+          }
+        }
+
+        for (const [alias, ids] of aliasMap) {
+          if (ids.length > 1) {
+            writer.writeLine(`'${alias}':`);
+            writer.indent(() => {
+              for (const id of ids) {
+                writer.writeLine(`| ${id}`);
+              }
+            });
+          } else {
+            writer.writeLine(`'${alias}': ${ids.join('')}`);
+          }
         }
       });
 
@@ -196,32 +222,32 @@ export class Compiler {
       return undefined;
     }
 
-    let method: string;
+    const paramWantsPromise = Boolean(param.flags & TypeFlag.Async);
+    const paramWantsArray = Boolean(param.flags & TypeFlag.Array);
+    const paramWantsAccessor = Boolean(param.flags & TypeFlag.Accessor);
+    const paramWantsIterable = Boolean(param.flags & TypeFlag.Iterable);
+    const paramIsOptional = Boolean(param.flags & TypeFlag.Optional);
+    const valueIsAsync = this.autowiring.isAsync(param.type);
+    let method: string = paramWantsArray ? 'find' : 'get';
     let prefix: string = '';
+    let arg: string = '';
     let postfix: string = '';
 
-    if (param.flags & TypeFlag.Accessor) {
-      method = param.flags & TypeFlag.Array ? 'createListAccessor' : 'createAccessor';
-    } else if (param.flags & TypeFlag.Iterable) {
-      method = param.flags & TypeFlag.Async ? 'createAsyncIterator' : 'createIterator';
-    } else {
-      const targetIsAsync = this.autowiring.isAsync(param.type);
-
-      if (!(param.flags & TypeFlag.Async) && targetIsAsync) {
-        if (param.flags & TypeFlag.Array) {
-          prefix = 'await Promise.all(';
-          postfix = ')';
-        } else {
-          prefix = 'await ';
-        }
-      } else if (param.flags & TypeFlag.Async && !targetIsAsync) {
-        prefix = 'Promise.resolve().then(() => ';
-        postfix = ')';
-      }
-
-      method = param.flags & TypeFlag.Array ? 'find' : 'get';
+    if (!paramWantsArray && !paramWantsIterable && paramIsOptional) {
+      arg = ', false';
     }
 
-    return `${prefix}di.${method}('${id}')${postfix},`;
+    if (paramWantsAccessor) {
+      prefix = '() => ';
+    } else if (paramWantsIterable) {
+      method = 'iterate';
+    } else if (!paramWantsPromise && valueIsAsync) {
+      prefix = 'await ';
+    } else if (paramWantsPromise && !valueIsAsync && !paramWantsArray) {
+      prefix = 'Promise.resolve().then(() => ';
+      postfix = ')';
+    }
+
+    return `${prefix}di.${method}('${id}'${arg})${postfix},`;
   }
 }

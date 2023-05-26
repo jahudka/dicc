@@ -64,12 +64,7 @@ export class TypeHelper {
   resolveType(type: Type): [type: Type, flags: TypeFlag] {
     let flags: TypeFlag = TypeFlag.None;
 
-    const nonNullable = type.getNonNullableType();
-
-    if (nonNullable !== type) {
-      flags |= TypeFlag.Optional;
-      type = nonNullable;
-    }
+    [type, flags] = this.resolveNullable(type, flags);
 
     const signatures = type.getCallSignatures();
 
@@ -87,8 +82,7 @@ export class TypeHelper {
     const target = this.resolveRootType(type);
 
     if (target === this.refs.get('Promise<T>')) {
-      flags |= TypeFlag.Async;
-      type = type.getTypeArguments()[0];
+      [type, flags] = this.resolveNullable(type.getTypeArguments()[0], flags | TypeFlag.Async);
     } else if (target === this.refs.get('Iterable<T>')) {
       flags |= TypeFlag.Iterable;
       type = type.getTypeArguments()[0];
@@ -119,6 +113,11 @@ export class TypeHelper {
     } else {
       return [aliases.getType()];
     }
+  }
+
+  resolveNullable(type: Type, flags: TypeFlag): [type: Type, flags: TypeFlag] {
+    const nonNullable = type.getNonNullableType();
+    return nonNullable !== type ? [nonNullable, flags | TypeFlag.Optional] : [type, flags];
   }
 
   resolveRootType(type: Type): Type {

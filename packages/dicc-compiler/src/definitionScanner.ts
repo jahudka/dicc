@@ -42,7 +42,7 @@ export class DefinitionScanner {
   }
 
   scanUsages(): void {
-    for (const method of ['get', 'find', 'createAccessor', 'createListAccessor', 'createIterator', 'createAsyncIterator']) {
+    for (const method of ['get', 'find', 'iterate']) {
       for (const call of this.helper.getContainerMethodCalls(method)) {
         const [id] = call.getArguments();
 
