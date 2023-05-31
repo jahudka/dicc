@@ -11,7 +11,7 @@ this project.) Don't get me wrong - decorators are awesome! I love decorators.
 I've built a pretty big library based _entirely_ on decorators.
 
 But - and I _cannot stress this enough_ - decorator-based dependency injection
-breaks one of the most sacred dependency injection principles - **your code
+breaks one of the most sacred dependency injection principles: **your code
 should almost NEVER know or care that dependency injection even exists**, and it
 most certainly shouldn't know anything about the specifics of the DI
 _implementation_ - in other words, your code _should not depend on your
@@ -70,7 +70,7 @@ npm i --save dicc
 
  - [Intro to Dependency Injection][1] - a general overview of core dependency
    injection principles
- - [Intro to DICC][2] - basic introduction to how DICC and how it was designed
+ - [Intro to DICC][2] - basic introduction to DICC and how it was designed
    to work
  - [Services and dependencies][3] - how to write service definitions for the
    DICC compiler and how to specify dependencies

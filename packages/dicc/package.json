@@ -9,8 +9,19 @@
     "ioc",
     "inversion of control"
   ],
-  "version": "0.0.11",
+  "version": "0.0.12",
   "license": "MIT",
+  "author": {
+    "name": "Dan Kadera",
+    "email": "me@subsonic.cz",
+    "url": "https://github.com/jahudka"
+  },
+  "homepage": "https://github.com/jahudka/dicc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jahudka/dicc.git",
+    "directory": "packages/dicc"
+  },
   "files": [
     "dist"
   ],

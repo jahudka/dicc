@@ -9,16 +9,30 @@
     "ioc",
     "inversion of control"
   ],
-  "version": "0.0.11",
+  "version": "0.0.12",
   "license": "MIT",
+  "author": {
+    "name": "Dan Kadera",
+    "email": "me@subsonic.cz",
+    "url": "https://github.com/jahudka"
+  },
+  "homepage": "https://github.com/jahudka/dicc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jahudka/dicc.git",
+    "directory": "packages/dicc-compiler"
+  },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "dicc": "dist/cli.js"
   },
   "dependencies": {
-    "dicc": "^0.0.11",
+    "dicc": "^0.0.12",
     "ts-morph": "^18.0",
     "typescript": "^5.0"
   },
