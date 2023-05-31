@@ -9,7 +9,7 @@
     "ioc",
     "inversion of control"
   ],
-  "version": "0.0.12",
+  "version": "0.0.13",
   "license": "MIT",
   "author": {
     "name": "Dan Kadera",
@@ -32,7 +32,7 @@
     "dicc": "dist/cli.js"
   },
   "dependencies": {
-    "dicc": "^0.0.12",
+    "dicc": "^0.0.13",
     "ts-morph": "^18.0",
     "typescript": "^5.0"
   },

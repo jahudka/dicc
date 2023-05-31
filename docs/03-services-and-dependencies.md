@@ -119,7 +119,9 @@ factory of each defined service and attempt to inject the correct values into
 its arguments when the service is being created. There are several ways services
 can depend on other services. We'll explore all the options using some examples.
 The first thing we'll look at is simply injecting a single instance of a
-dependency directly:
+dependency directly. We can assume that the appropriate service definitions for
+all the service classes in the following snippet exist, they're not important
+here:
 
 ```typescript
 // no constructor, or a constructor with no arguments, means no dependencies
@@ -133,7 +135,7 @@ export class ServiceTwo {
 }
 
 // ServiceThree depends on both services directly - it doesn't care if either
-// service it depends on is async, it just wants the resolved instance; the
+// service it depends on is async, it just wants the resolved instances; the
 // compiled factory for ServiceThree would therefore be async in order to be
 // able to resolve the promise for ServiceTwo, but ServiceThree itself doesn't
 // need to know or care:
@@ -153,7 +155,8 @@ export class ServiceFour {
   constructor(readonly two: Promise<ServiceTwo>) {}
 }
 
-// ServiceFive shows an example of depending on optional services:
+// ServiceFive shows an example of depending on optional services.
+// Let's first imagine an optional service:
 export class ServiceBar {
   create(): ServiceBar | undefined {
     return process.env.WITH_BAR ? new ServiceBar() : undefined;
@@ -172,8 +175,8 @@ export class ServiceFive {
 
 This covers the most common and most simple injection modes, but DICC can do
 a lot more than that. For example, you can depend on an _accessor_ for a
-service - a callback with no arguments which will return the requested service -
-this can be useful to break cyclic dependencies (an accessor is not a direct
+service - a callback with no arguments which will return the requested service.
+This can be useful to break cyclic dependencies (an accessor is not a direct
 dependency), or to let a potentially heavy service be initialised lazily only
 when it's needed:
 
@@ -211,9 +214,9 @@ export class FileLogger {
   }
 }
 
-// AggregatedLogger will get all defined Logger implemenations;
-// note that it mustn't be given the Logger alias itself, as that would make
-// the container attempt to inject it into itself, which would fail:
+// AggregatedLogger will get all the services with the Logger alias;
+// note that it mustn't be given the Logger alias itself, as that would
+// make the container attempt to inject it into itself, which would fail:
 export class AggregatedLogger {
   constructor(private readonly loggers: Logger[]) {}
 
@@ -239,7 +242,9 @@ You can combine accessor and array injection:
 ```typescript
 export class AggregatedLogger {
   constructor(
+    // for sync services:
     private readonly getLoggers: () => Logger[],
+    // if one or more of the services is async:
     private readonly getLoggersAsync: () => Promise<Logger[]>,
   ) {}
 }
@@ -253,7 +258,9 @@ when the iterable reaches it. Works for sync and async services:
 ```typescript
 export class AggregatedLogger {
   constructor(
+    // for sync services:
     private readonly loggers: Iterable<Logger>,
+    // if one or more of the services is async:
     private readonly asyncLoggers: AsyncIterable<Logger>,
   ) {}
 }
@@ -262,20 +269,21 @@ export class AggregatedLogger {
 Note that accessors and iterables in combination with async services can break
 one of the core DI concepts - that services shouldn't care how their
 dependencies are created. If you need to inject an accessor or an iterable, you
-need to know whether the injected service is async - i.e. service X, which needs
-to have an accessor for service Y, needs to type the accessor according to the
-definition (and dependencies) of service Y - the accessor must either return
-`Y`, or `Promise<Y>`, and X shouldn't, in theory, have to deal with that - but
-I don't know of any mechanism which could circumvent this. At least it isn't a
-dependency on the DI framework itself - the requirement to appropriately pick
-whether X should depend on `() => Y` or `() => Promise<Y>` arises from
-application code, and as far as I can tell, there is no way this could be
-resolved in _any_ framework which allows async services (well, not unless other
-contracts are broken - such as accessors and iterables being lazy, which seems
-like a more important feature). In any case, you don't have to _think_ about it
-too much, because DICC will throw an error during compilation if you try to
-inject a non-async accessor or iterable for something which _is_ async.
+need to know whether (one or more of) the injected service(s) is async - e.g.
+service X, which needs to have an accessor for service Y, needs to type the
+accessor according to the definition (and dependencies) of service Y - the
+accessor must either return `Y`, or `Promise<Y>`, but X shouldn't have to deal
+with that. But I don't know of any mechanism which could circumvent this. At
+least it isn't a dependency on the DI framework itself - the requirement to
+appropriately pick whether X should depend on `() => Y` or `() => Promise<Y>`
+arises from application code, and as far as I can tell, there is no way this
+could be resolved in _any_ framework which allows async services (well, not
+unless other contracts are broken - such as accessors and iterables being lazy,
+which seems like a more important feature). In any case, you don't have to
+_think_ about it too much, because DICC will throw an error during compilation
+if you try to inject a non-async accessor or iterable for something which _is_
+async.
 
-Next: [Going live][1]
+**Next**: [Going live][1]
 
 [1]: ./04-going-live.md

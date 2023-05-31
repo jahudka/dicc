@@ -179,7 +179,15 @@ In this section we'll look at some terms used in the rest of the documentation:
    application can access _locally-scoped_ services. When the async call chain
    terminates (i.e. when the value returned from the callback is not a promise,
    or when the promise is resolved), the local scope and all its services are
-   destroyed.
+   destroyed. Global and private services are available inside a fork as usual,
+   and local services can depend on them, but global services cannot _directly_
+   depend on local ones (although they can depend on e.g. accessors for them).
+ - A **dynamic service** is one which the compiler knows about, but which the
+   container cannot create at runtime - in other words, it is a service without
+   a factory. Such a service must be registered manually at runtime in order to
+   be available for injection. This can be useful especially in combination with
+   other features - e.g. a locally-scoped dynamic service which represents an
+   HTTP request.
  - A **hook** is one of a few optional callbacks you can specify in service
    definitions; they are executed by the container at important points in a
    service's lifecycle. The available hooks are:
@@ -205,16 +213,11 @@ In this section we'll look at some terms used in the rest of the documentation:
  - An **async service** is a service whose factory returns a Promise, or whose
    `onCreate` hook returns a Promise, or which depends on another async service.
    It is impossible to obtain a resolved instance of an async service from the
-   container directly; rather, you will always obtain a Promise which you need
-   to await. DICC will do it for you automatically when injecting the service as
-   a dependency.
- - A **dynamic service** is one which the compiler knows about, but which the
-   container cannot create at runtime - such a service must be registered
-   manually at runtime in order to be available for injection. This can be
-   useful especially in combination with other features - e.g. a locally-scoped
-   dynamic service which represents an HTTP request.
+   container directly; rather, you will always obtain a Promise which you will
+   need to await. DICC will do it for you automatically when injecting the
+   service as a dependency.
 
-Next: [Services and dependencies][2]
+**Next**: [Services and dependencies][2]
 
 [1]: ./01-intro-to-di.md
 [2]: ./03-services-and-dependencies.md
