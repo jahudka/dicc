@@ -11,7 +11,13 @@ import {
   IterateResult,
   ServiceScope,
 } from './types';
-import { isAsyncIterable, isIterable, isPromiseLike } from './utils';
+import {
+  createAsyncIterator,
+  createIterator,
+  isAsyncIterable,
+  isIterable,
+  isPromiseLike,
+} from './utils';
 
 
 export class Container<Services extends Record<string, any> = {}> {
@@ -38,7 +44,9 @@ export class Container<Services extends Record<string, any> = {}> {
   iterate(alias: string): Iterable<any> | AsyncIterable<any> {
     const ids = this.resolve(alias, false);
     const async = ids.some((id) => this.definitions.get(id)?.async);
-    return async ? this.createAsyncIterator(alias) : this.createIterator(alias);
+    return async
+      ? createAsyncIterator(ids, async (id) => this.getOrCreate(id, false))
+      : createIterator(ids, (id) => this.getOrCreate(id, false));
   }
 
   find<K extends keyof Services>(alias: K): FindResult<Services, K>;
@@ -122,26 +130,6 @@ export class Container<Services extends Record<string, any> = {}> {
       for (const alias of definition.aliases) {
         this.aliases.has(alias) || this.aliases.set(alias, []);
         this.aliases.get(alias)!.push(id);
-      }
-    }
-  }
-
-  * createIterator<T>(alias: string): Iterable<T> {
-    for (const id of this.resolve(alias, false)) {
-      const service = this.getOrCreate(id, false);
-
-      if (service !== undefined) {
-        yield service;
-      }
-    }
-  }
-
-  async * createAsyncIterator<T>(alias: string): AsyncIterable<T> {
-    for (const id of this.resolve(alias, false)) {
-      const service = await this.getOrCreate(id, false) as T;
-
-      if (service) {
-        yield service;
       }
     }
   }
