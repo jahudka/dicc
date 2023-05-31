@@ -25,4 +25,5 @@ patch-release:
 
 .PHONY: publish
 publish:
+	cp ../../readme.md ./
 	../../node_modules/.bin/is-published || npm publish
