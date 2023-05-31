@@ -3,7 +3,7 @@
 In this section we'll set up some commonly understood terms, outline some
 general best practices and basically have a jolly good time. The topics
 covered in this chapter aren't specific to DICC; if you're a veteran dependency
-injection practitioner, feel free to skip ahead to the next chapter.
+injection practitioner, feel free to skip ahead to the [next chapter][1].
 
 
 ## What is dependency injection?
@@ -76,3 +76,7 @@ _interfaces_, rather than depending on a specific implementation of that
 interface - so instead of depending on e.g. `EmailAlertSender`, you'd depend on
 something like `AlertSenderInterface`, and the `EmailAlertSender` class would
 implement this interface.
+
+Next: [Intro to DICC][1]
+
+[1]: ./02-intro-to-dicc.md
