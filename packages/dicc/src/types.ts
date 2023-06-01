@@ -11,19 +11,20 @@ export type Intersect<Types> =
 
 export type MaybeOptional<T, Need extends boolean>
   = T extends undefined ? Need extends false ? T : Exclude<T, undefined> : Exclude<T, undefined>;
+export type Resolved<T> = T extends Promise<infer V> ? V : T;
 
 export type GetResult<Services extends Record<string, any>, K extends keyof Services, Need extends boolean>
   = Services[K] extends Promise<infer T> ? Promise<MaybeOptional<T, Need>> : MaybeOptional<Services[K], Need>;
 
 export type FindResult<Services extends Record<string, any>, K extends keyof Services>
-  = [Services[K]] extends [Promise<infer T>]
-    ? Promise<Exclude<T, undefined>[]>
-    : Exclude<Services[K], undefined>[];
+  = Extract<Services[K], Promise<any>> extends never
+    ? Exclude<Services[K], undefined>[]
+    : Promise<Resolved<Exclude<Services[K], undefined>>[]>;
 
 export type IterateResult<Services extends Record<string, any>, K extends keyof Services>
-  = [Services[K]] extends [Promise<infer T>]
-    ? AsyncIterable<Exclude<T, undefined>>
-    : Iterable<Exclude<Services[K], undefined>>;
+  = Extract<Services[K], Promise<any>> extends never
+    ? Iterable<Exclude<Services[K], undefined>>
+    : AsyncIterable<Resolved<Exclude<Services[K], undefined>>>;
 
 export type ServiceScope = 'global' | 'local' | 'private';
 export type ServiceHook<T> = (service: T, ...args: any[]) => Promise<void> | void;
