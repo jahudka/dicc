@@ -246,8 +246,14 @@ export class DefinitionScanner {
   }
 
   private resolveParameter(symbol: Symbol): ParameterInfo {
-    const [type, flags] = this.helper.resolveType(symbol.getValueDeclarationOrThrow().getType());
     const name = symbol.getName();
+    const declaration = symbol.getValueDeclarationOrThrow();
+    let [type, flags] = this.helper.resolveType(declaration.getType());
+
+    if (Node.isParameterDeclaration(declaration) && declaration.hasInitializer()) {
+      flags |= TypeFlag.Optional;
+    }
+
     return type.isClassOrInterface() || type.isObject()
       ? { name, type, flags }
       : { name, flags };
