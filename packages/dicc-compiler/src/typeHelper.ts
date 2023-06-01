@@ -68,13 +68,7 @@ export class TypeHelper {
 
     const signatures = type.getCallSignatures();
 
-    if (signatures.length > 1) {
-      throw new Error('Accessors may only have one overload');
-    } else if (signatures.length) {
-      if (signatures[0].getParameters().length) {
-        throw new Error('Accessors may not accept arguments');
-      }
-
+    if (signatures.length === 1 && !signatures[0].getParameters().length) {
       flags |= TypeFlag.Accessor;
       type = signatures[0].getReturnType();
     }
