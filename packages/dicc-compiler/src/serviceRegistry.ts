@@ -1,21 +1,39 @@
-import { SourceFile, Type } from 'ts-morph';
-import { ServiceDefinitionInfo } from './types';
+import { Type } from 'ts-morph';
+import { ServiceDecoratorInfo, ServiceDefinitionInfo, ServiceRegistrationInfo } from './types';
 
 export class ServiceRegistry {
   private readonly definitions: Map<string, ServiceDefinitionInfo> = new Map();
-  private readonly sources: Set<SourceFile> = new Set();
   private readonly types: Map<Type, string> = new Map();
   private readonly aliases: Map<string, Set<string>> = new Map();
   private readonly ids: Set<string> = new Set();
+  private readonly decorators: Map<string, ServiceDecoratorInfo[]> = new Map();
 
-  register(definition: ServiceDefinitionInfo): void {
-    this.definitions.set(definition.id, definition);
-    this.sources.add(definition.source);
-    this.registerAlias(definition.id, definition.id);
-    this.registerAlias(definition.id, this.registerType(definition.type));
+  register({ id, type, ...registration }: ServiceRegistrationInfo): void {
+    const typeId = this.registerType(type);
+    id ??= typeId;
+    const definition = { id, type, ...registration, decorators: [] };
+    this.definitions.set(id, definition);
+    this.registerAlias(id, id);
+    this.registerAlias(id, typeId);
 
     for (const alias of definition.aliases) {
-      this.registerAlias(definition.id, this.registerType(alias));
+      this.registerAlias(id, this.registerType(alias));
+    }
+  }
+
+  decorate(decorator: ServiceDecoratorInfo): void {
+    const typeId = this.registerType(decorator.type);
+    this.decorators.has(typeId) || this.decorators.set(typeId, []);
+    this.decorators.get(typeId)!.push(decorator);
+  }
+
+  applyDecorators(): void {
+    for (const [id, decorators] of this.decorators) {
+      const definitions = [...this.aliases.get(id) ?? []].map((id) => this.get(id));
+
+      for (const definition of definitions) {
+        definition.decorators.push(...decorators);
+      }
     }
   }
 
@@ -25,10 +43,6 @@ export class ServiceRegistry {
 
   get(id: string): ServiceDefinitionInfo {
     return this.definitions.get(id)!;
-  }
-
-  getSources(): Iterable<SourceFile> {
-    return this.sources;
   }
 
   getDefinitions(): Iterable<ServiceDefinitionInfo> {
@@ -60,10 +74,10 @@ export class ServiceRegistry {
       return existing;
     }
 
-    const name = type.getSymbol()?.getName() ?? '#Anonymous';
+    const name = type.getSymbol()?.getName() ?? 'Anonymous';
 
     for (let idx = 0; true; ++idx) {
-      const id = `${name}.${idx}`;
+      const id = `#${name}.${idx}`;
 
       if (!this.ids.has(id)) {
         this.types.set(type, id);

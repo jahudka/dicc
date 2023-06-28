@@ -1,11 +1,15 @@
 import {
   CallExpression,
+  ClassDeclaration,
+  InterfaceDeclaration,
   Node,
+  PropertyName,
   SourceFile,
   SyntaxKind,
   Type,
+  TypeAliasDeclaration,
   TypeNode,
-  PropertyName, TypeReferenceNode,
+  TypeReferenceNode,
 } from 'ts-morph';
 import { ReferenceResolver } from './referenceResolver';
 import { SourceFiles } from './sourceFiles';
@@ -14,6 +18,7 @@ import { ReferenceMap, TypeFlag } from './types';
 const referenceSpecifiers = {
   Container: { kind: SyntaxKind.ClassDeclaration, module: 'dicc' },
   ServiceDefinition: { kind: SyntaxKind.TypeAliasDeclaration, module: 'dicc' },
+  ServiceDecorator: { kind: SyntaxKind.TypeAliasDeclaration, module: 'dicc' },
   'Promise<T>': { kind: SyntaxKind.TypeAliasDeclaration },
   'Iterable<T>': { kind: SyntaxKind.TypeAliasDeclaration },
   'AsyncIterable<T>': { kind: SyntaxKind.TypeAliasDeclaration },
@@ -38,6 +43,11 @@ export class TypeHelper {
       && this.resolveRootType(node.getTypeName().getType()) === this.refs.get('ServiceDefinition');
   }
 
+  isServiceDecorator(node?: TypeNode): node is TypeReferenceNode {
+    return Node.isTypeReference(node)
+      && this.resolveRootType(node.getTypeName().getType()) === this.refs.get('ServiceDecorator');
+  }
+
   resolveLiteralPropertyName(name: PropertyName): string | number | undefined {
     if (Node.isIdentifier(name)) {
       return name.getText();
@@ -49,9 +59,8 @@ export class TypeHelper {
   }
 
   resolveServiceType(type: Type): [type: Type, async: boolean] {
-    let async = false;
-
     const target = this.resolveRootType(type);
+    let async = false;
 
     if (target === this.refs.get('Promise<T>')) {
       async = true;
@@ -68,9 +77,17 @@ export class TypeHelper {
 
     const signatures = type.getCallSignatures();
 
-    if (signatures.length === 1 && !signatures[0].getParameters().length) {
-      flags |= TypeFlag.Accessor;
-      type = signatures[0].getReturnType();
+    if (signatures.length === 1) {
+      const params = signatures[0].getParameters();
+      const returnType = signatures[0].getReturnType();
+
+      if (params.length === 0) {
+        flags |= TypeFlag.Accessor;
+        type = returnType;
+      } else if (params.length === 1 && returnType.getText() === 'void') {
+        flags |= TypeFlag.Injector;
+        type = params[0].getValueDeclarationOrThrow().getType();
+      }
     }
 
     const target = this.resolveRootType(type);
@@ -92,6 +109,8 @@ export class TypeHelper {
 
     if ((flags & TypeFlag.Iterable) && (flags & (TypeFlag.Accessor | TypeFlag.Array))) {
       throw new Error(`Iterable services are mutually exclusive with accessors and arrays`);
+    } else if ((flags & TypeFlag.Injector) && flags !== TypeFlag.Injector) {
+      throw new Error(`Injectors must accept a single resolved service instance`);
     }
 
     return [type, flags];
@@ -112,6 +131,59 @@ export class TypeHelper {
   resolveNullable(type: Type, flags: TypeFlag): [type: Type, flags: TypeFlag] {
     const nonNullable = type.getNonNullableType();
     return nonNullable !== type ? [nonNullable, flags | TypeFlag.Optional] : [type, flags];
+  }
+
+  resolveClassTypes(declaration: ClassDeclaration): Type[] {
+    const types: Type[] = [];
+    let cursor: ClassDeclaration | undefined = declaration;
+
+    while (cursor) {
+      for (const ifc of cursor.getImplements()) {
+        types.push(ifc.getType());
+
+        const impl = ifc.getExpression();
+
+        if (Node.isIdentifier(impl)) {
+          const parents = impl.getDefinitionNodes().flatMap((node) =>
+            Node.isClassDeclaration(node)
+            ? this.resolveClassTypes(node)
+              : Node.isInterfaceDeclaration(node)
+              ? this.resolveInterfaceTypes(node)
+              : []
+          );
+
+          parents.length && types.push(...parents);
+        }
+      }
+
+      const parent = cursor.getBaseClass();
+      parent && types.push(parent.getType());
+      cursor = parent;
+    }
+
+    return types;
+  }
+
+  resolveInterfaceTypes(declaration: InterfaceDeclaration): Type[] {
+    const types: Type[] = [];
+    const queue: (ClassDeclaration | InterfaceDeclaration | TypeAliasDeclaration)[] = [declaration];
+    let cursor: ClassDeclaration | InterfaceDeclaration | TypeAliasDeclaration | undefined;
+
+    while (cursor = queue.shift()) {
+      if (Node.isClassDeclaration(cursor)) {
+        const classTypes = this.resolveClassTypes(cursor);
+        classTypes.length && types.push(...classTypes);
+      } else if (Node.isInterfaceDeclaration(cursor)) {
+        for (const ifc of cursor.getBaseDeclarations()) {
+          types.push(ifc.getType());
+          queue.push(ifc);
+        }
+      } else {
+        types.push(cursor.getType());
+      }
+    }
+
+    return types;
   }
 
   resolveRootType(type: Type): Type {

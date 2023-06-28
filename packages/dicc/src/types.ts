@@ -19,12 +19,12 @@ export type GetResult<Services extends Record<string, any>, K extends keyof Serv
 export type FindResult<Services extends Record<string, any>, K extends keyof Services>
   = Extract<Services[K], Promise<any>> extends never
     ? Exclude<Services[K], undefined>[]
-    : Promise<Resolved<Exclude<Services[K], undefined>>[]>;
+    : Promise<Exclude<Resolved<Services[K]>, undefined>[]>;
 
 export type IterateResult<Services extends Record<string, any>, K extends keyof Services>
   = Extract<Services[K], Promise<any>> extends never
     ? Iterable<Exclude<Services[K], undefined>>
-    : AsyncIterable<Resolved<Exclude<Services[K], undefined>>>;
+    : AsyncIterable<Exclude<Resolved<Services[K]>, undefined>>;
 
 export type ServiceScope = 'global' | 'local' | 'private';
 export type ServiceHook<T> = (service: T, ...args: any[]) => Promise<void> | void;
@@ -43,6 +43,14 @@ export type ServiceDefinition<T extends Intersect<A>, A = undefined> =
   | Factory<Promise<T | undefined> | T | undefined>
   | undefined
   | ServiceDefinitionOptions<T>;
+
+export type ServiceDecorator<T> = {
+  decorate?: <S extends T>(service: S, ...args: any[]) => Promise<S> | S;
+  scope?: ServiceScope;
+  onCreate?: ServiceHook<T>;
+  onFork?: ServiceHook<T>;
+  onDestroy?: ServiceHook<T>;
+};
 
 export type ServiceType<D> =
   D extends Factory<Promise<infer T> | infer T> ? T
@@ -63,7 +71,7 @@ export type CompiledServiceForkHook<T, Services extends Record<string, any> = {}
 };
 
 export type CompiledServiceDefinitionOptions<T = any, Services extends Record<string, any> = {}> = {
-  aliases: string[];
+  aliases?: string[];
   scope?: ServiceScope;
   onFork?: CompiledServiceForkHook<T, Services>;
   onDestroy?: CompiledAsyncServiceHook<T, Services>;

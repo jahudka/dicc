@@ -10,7 +10,7 @@ clean:
 
 .PHONY: compile
 compile:
-	dist/cli.js -i src/definitions.ts -o src/container.ts
+	dist/cli.js
 
 dist:
 	../../node_modules/.bin/tsc

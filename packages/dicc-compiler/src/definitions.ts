@@ -1,16 +1,25 @@
 import { ServiceDefinition } from 'dicc';
 import { IndentationText, NewLineKind, Project, QuoteKind } from 'ts-morph';
-import { Autowiring } from './autowiring';
-import { Compiler } from './compiler';
-import { DefinitionScanner } from './definitionScanner';
+import { ConfigLoader } from './configLoader';
 import { Dicc } from './dicc';
-import { ServiceRegistry } from './serviceRegistry';
-import { SourceFiles } from './sourceFiles';
-import { TypeHelper } from './typeHelper';
-import { DiccOptions } from './types';
+import { DiccConfig } from './types';
 
-export const project = ((options: DiccOptions) => new Project({
-  tsConfigFilePath: options.project ?? './tsconfig.json',
+export { Argv } from './argv';
+export { Autowiring } from './autowiring';
+export { Checker } from './checker';
+export { Compiler } from './compiler';
+export { ConfigLoader } from './configLoader';
+export { DefinitionScanner } from './definitionScanner';
+export { ServiceRegistry } from './serviceRegistry';
+export { SourceFiles } from './sourceFiles';
+export { TypeHelper } from './typeHelper';
+
+export const config = (
+  async (loader: ConfigLoader) => loader.load()
+) satisfies ServiceDefinition<DiccConfig>;
+
+export const project = ((config: DiccConfig) => new Project({
+  tsConfigFilePath: config.project,
   manipulationSettings: {
     indentationText: IndentationText.TwoSpaces,
     newLineKind: NewLineKind.LineFeed,
@@ -19,11 +28,4 @@ export const project = ((options: DiccOptions) => new Project({
   },
 })) satisfies ServiceDefinition<Project>;
 
-export const sourceFiles = SourceFiles satisfies ServiceDefinition<SourceFiles>;
-export const typeHelper = TypeHelper satisfies ServiceDefinition<TypeHelper>;
-export const serviceRegistry = ServiceRegistry satisfies ServiceDefinition<ServiceRegistry>;
-export const definitionScanner = DefinitionScanner satisfies ServiceDefinition<DefinitionScanner>;
-export const autowiring = Autowiring satisfies ServiceDefinition<Autowiring>;
-export const compiler = Compiler satisfies ServiceDefinition<Compiler>;
-export const options = undefined satisfies ServiceDefinition<DiccOptions>;
 export const dicc = Dicc satisfies ServiceDefinition<Dicc>;

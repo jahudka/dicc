@@ -1,23 +1,51 @@
 import { ServiceScope } from 'dicc';
 import { KindToNodeMappings, SourceFile, SyntaxKind, Type } from 'ts-morph';
+import { z } from 'zod';
 
-export interface DiccOptions {
-  project?: string;
-  input: string;
-  output: string;
-  export: string;
-  map: string;
-}
+const resourceSchema = z.strictObject({
+  exclude: z.array(z.string()).optional(),
+});
 
-export type ServiceDefinitionInfo = {
+export const diccConfigSchema = z.strictObject({
+  project: z.string().default('./tsconfig.json'),
+  output: z.string(),
+  name: z.string().regex(/^[a-z$_][a-z0-9$_]*$/i, 'Invalid identifier').default('container'),
+  map: z.string().regex(/^[a-z$_][a-z0-9$_]*$/i, 'Invalid identifier').default('Services'),
+  resources: z.record(resourceSchema.optional().nullable()),
+});
+
+type ResourceConfigSchema = z.infer<typeof resourceSchema>;
+type DiccConfigSchema = z.infer<typeof diccConfigSchema>;
+
+export interface ResourceOptions extends ResourceConfigSchema {}
+export interface DiccConfig extends DiccConfigSchema {}
+
+export type ServiceRegistrationInfo = {
   source: SourceFile;
-  id: string;
+  path: string;
+  id?: string;
   type: Type;
   aliases: Type[];
   object?: boolean;
+  literal?: boolean;
   factory?: ServiceFactoryInfo;
   hooks: ServiceHooks;
-  scope: ServiceScope;
+  scope?: ServiceScope;
+};
+
+export type ServiceDefinitionInfo = Omit<ServiceRegistrationInfo, 'id'> & {
+  id: string;
+  async?: boolean;
+  decorators: ServiceDecoratorInfo[];
+};
+
+export type ServiceDecoratorInfo = {
+  source: SourceFile;
+  path: string;
+  type: Type;
+  decorate?: ServiceHookInfo;
+  hooks: ServiceHooks;
+  scope?: ServiceScope;
 };
 
 export type ServiceFactoryInfo = {
@@ -45,12 +73,13 @@ export type ParameterInfo = {
 };
 
 export enum TypeFlag {
-  None     = 0b00000,
-  Optional = 0b00001,
-  Array    = 0b00010,
-  Iterable = 0b00100,
-  Async    = 0b01000,
-  Accessor = 0b10000,
+  None     = 0b000000,
+  Optional = 0b000001,
+  Array    = 0b000010,
+  Iterable = 0b000100,
+  Async    = 0b001000,
+  Accessor = 0b010000,
+  Injector = 0b100000,
 }
 
 export type ReferenceSpecifier<T extends SyntaxKind = any> = {

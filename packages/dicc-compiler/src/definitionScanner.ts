@@ -1,8 +1,10 @@
 import { ServiceScope } from 'dicc';
 import {
+  ClassDeclaration,
   ExportedDeclarations,
   Expression,
   Identifier,
+  InterfaceDeclaration,
   ModuleDeclaration,
   Node,
   ObjectLiteralExpression,
@@ -12,11 +14,19 @@ import {
   Symbol,
   SyntaxKind,
   Type,
-  TypeNode,
+  TypeReferenceNode,
+  VariableDeclaration,
 } from 'ts-morph';
 import { ServiceRegistry } from './serviceRegistry';
 import { TypeHelper } from './typeHelper';
-import { ParameterInfo, ServiceFactoryInfo, ServiceHooks, TypeFlag } from './types';
+import {
+  ParameterInfo,
+  ResourceOptions,
+  ServiceFactoryInfo,
+  ServiceHookInfo,
+  ServiceHooks,
+  TypeFlag,
+} from './types';
 
 export class DefinitionScanner {
   private readonly registry: ServiceRegistry;
@@ -27,153 +37,174 @@ export class DefinitionScanner {
     this.helper = helper;
   }
 
-  scanDefinitions(input: SourceFile): void {
-    for (const [id, expression] of this.scanNode(input)) {
-      try {
-        const [definition, type, aliases] = this.extractDefinitionParameters(expression);
-
-        if (definition && type) {
-          this.registerDefinition(input, id, definition, type, aliases);
-        }
-      } catch (e: any) {
-        throw new Error(`Invalid definition '${id}': ${e.message}`);
-      }
-    }
+  scanDefinitions(source: SourceFile, options: ResourceOptions = {}): void {
+    const exclude = createExcludeRegex(options.exclude);
+    const ctx: ScanContext = { source, exclude, path: '' };
+    this.scanNode(ctx, source);
   }
 
-  scanUsages(): void {
-    for (const method of ['get', 'find', 'iterate']) {
-      for (const call of this.helper.getContainerMethodCalls(method)) {
-        const [id] = call.getArguments();
-
-        if (Node.isStringLiteral(id) && !this.registry.has(id.getLiteralValue())) {
-          const sf = id.getSourceFile();
-          const ln = id.getStartLineNumber();
-          console.log(`Warning: unknown service '${id.getLiteralValue()}' in call to Container.${method}() in ${sf.getFilePath()} on line ${ln}`);
-        }
-      }
+  private scanNode(ctx: ScanContext, node?: Node): void {
+    if (ctx.exclude?.test(ctx.path)) {
+      return;
     }
 
-    const registrations: Set<string> = new Set();
-
-    for (const call of this.helper.getContainerMethodCalls('register')) {
-      const [id] = call.getArguments();
-
-      if (Node.isStringLiteral(id)) {
-        registrations.add(id.getLiteralValue());
-      }
-    }
-
-    for (const definition of this.registry.getDefinitions()) {
-      if (!definition.factory && !registrations.has(definition.id)) {
-        console.log(`Warning: no Container.register() call found for dynamic service '${definition.id}'`);
-      }
-    }
-  }
-
-  private * scanNode(node?: Node, path: string = ''): Iterable<[string, SatisfiesExpression]> {
     if (Node.isSourceFile(node)) {
-      yield * this.scanModule(node, path);
+      this.scanModule(ctx, node);
     } else if (Node.isModuleDeclaration(node) && node.hasNamespaceKeyword()) {
-      yield * this.scanModule(node, path);
+      this.scanModule(ctx, node);
     } else if (Node.isObjectLiteralExpression(node)) {
-      yield * this.scanObject(node, path);
+      this.scanObject(ctx, node);
     } else if (Node.isVariableDeclaration(node)) {
-      yield * this.scanNode(node.getInitializer(), path);
+      this.scanVariableDeclaration(ctx, node);
     } else if (Node.isIdentifier(node)) {
-      yield * this.scanIdentifier(node, path);
+      this.scanIdentifier(ctx, node);
+    } else if (Node.isClassDeclaration(node)) {
+      this.scanClassDeclaration(ctx, node);
+    } else if (Node.isInterfaceDeclaration(node)) {
+      this.scanInterfaceDeclaration(ctx, node);
     } else if (Node.isSatisfiesExpression(node)) {
-      yield [path.replace(/\.$/, ''), node];
+      this.scanSatisfiesExpression(ctx, node);
     }
   }
 
-  private * scanModule(node: SourceFile | ModuleDeclaration, path: string = ''): Iterable<[string, SatisfiesExpression]> {
+  private scanModule(ctx: ScanContext, node: SourceFile | ModuleDeclaration): void {
     for (const [name, declarations] of node.getExportedDeclarations()) {
-      yield * this.scanExportedDeclarations(declarations, `${path}${name}.`);
+      this.scanExportedDeclarations({ ...ctx, path: `${ctx.path}${name}.` }, declarations);
     }
   }
 
-  private * scanExportedDeclarations(declarations?: ExportedDeclarations[], path: string = ''): Iterable<[string, SatisfiesExpression]> {
+  private scanExportedDeclarations(ctx: ScanContext, declarations?: ExportedDeclarations[]): void {
     for (const declaration of declarations ?? []) {
-      yield * this.scanNode(declaration, path);
+      this.scanNode(ctx, declaration);
     }
   }
 
-  private * scanObject(node: ObjectLiteralExpression, path: string = ''): Iterable<[string, SatisfiesExpression]> {
+  private scanObject(ctx: ScanContext, node: ObjectLiteralExpression): void {
     for (const prop of node.getProperties()) {
       if (Node.isSpreadAssignment(prop)) {
-        yield * this.scanNode(prop.getExpression(), path);
+        this.scanNode(ctx, prop.getExpression());
       } else if (Node.isShorthandPropertyAssignment(prop)) {
-        yield * this.scanNode(prop.getNameNode(), `${path}${prop.getName()}.`);
+        this.scanNode({ ...ctx, path: `${ctx.path}${prop.getName()}.` }, prop.getNameNode());
       } else if (Node.isPropertyAssignment(prop)) {
         const name = this.helper.resolveLiteralPropertyName(prop.getNameNode());
 
         if (name !== undefined) {
-          yield * this.scanNode(prop.getInitializerOrThrow(), `${path}${name}.`);
+          this.scanNode({ ...ctx, path: `${ctx.path}${name}.` }, prop.getInitializerOrThrow());
         }
       }
     }
   }
 
-  private * scanIdentifier(node: Identifier, path: string = ''): Iterable<[string, SatisfiesExpression]> {
+  private scanIdentifier(ctx: ScanContext, node: Identifier): void {
     for (const definition of node.getDefinitionNodes()) {
       if (Node.isNamespaceImport(definition)) {
-        yield * this.scanModule(
+        this.scanModule(
+          ctx,
           definition
             .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
             .getModuleSpecifierSourceFileOrThrow(),
-          path,
         );
       } else if (Node.isImportClause(definition)) {
-        yield * this.scanExportedDeclarations(
+        this.scanExportedDeclarations(
+          ctx,
           definition
             .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
             .getModuleSpecifierSourceFileOrThrow()
             .getExportedDeclarations()
             .get('default'),
-          path,
         );
       } else if (Node.isImportSpecifier(definition)) {
-        yield * this.scanExportedDeclarations(
+        this.scanExportedDeclarations(
+          ctx,
           definition
             .getFirstAncestorByKindOrThrow(SyntaxKind.ImportDeclaration)
             .getModuleSpecifierSourceFileOrThrow()
             .getExportedDeclarations()
             .get(definition.getAliasNode()?.getText() ?? definition.getName()),
-          path,
         );
       } else if (Node.isVariableDeclaration(definition)) {
-        yield * this.scanNode(definition.getInitializerOrThrow(), path);
+        this.scanNode(ctx, definition.getInitializer());
       }
     }
   }
 
-  private extractDefinitionParameters(expression: SatisfiesExpression): [definition?: Expression, type?: TypeNode, aliases?: TypeNode] {
-    const satisfies = expression.getTypeNode();
-
-    if (!this.helper.isServiceDefinition(satisfies)) {
-      return [];
+  private scanClassDeclaration(ctx: ScanContext, node: ClassDeclaration): void {
+    if (node.isAbstract() || node.getTypeParameters().length) {
+      return;
     }
 
-    const definition = expression.getExpression();
-    const [type, aliases] = satisfies.getTypeArguments();
-    return [definition, type, aliases];
+    this.registerService(ctx, node.getType(), this.helper.resolveClassTypes(node), undefined, true);
   }
 
-  private registerDefinition(source: SourceFile, id: string, definition: Expression, typeArg: TypeNode, aliasArg?: TypeNode): void {
-    const type = typeArg.getType();
-    const aliases = this.helper.resolveAliases(aliasArg);
-    const [factory, object] = this.resolveFactory(definition);
+  private scanInterfaceDeclaration(ctx: ScanContext, node: InterfaceDeclaration): void {
+    if (node.getTypeParameters().length) {
+      return;
+    }
+
+    this.registerService(ctx, node.getType(), this.helper.resolveInterfaceTypes(node), undefined, true);
+  }
+
+  private scanVariableDeclaration(ctx: ScanContext, node: VariableDeclaration): void {
+    const initializer = node.getInitializer();
+
+    if (Node.isSatisfiesExpression(initializer)) {
+      this.scanSatisfiesExpression(ctx, initializer);
+    }
+  }
+
+  private scanSatisfiesExpression(ctx: ScanContext, node: SatisfiesExpression): void {
+    const satisfies = node.getTypeNode();
+
+    if (this.helper.isServiceDefinition(satisfies)) {
+      const [typeArg, aliasArg] = satisfies.getTypeArguments();
+      this.registerService(ctx, typeArg.getType(), this.helper.resolveAliases(aliasArg), node.getExpression());
+    } else if (this.helper.isServiceDecorator(satisfies)) {
+      this.registerDecorator(ctx, node.getExpression(), satisfies);
+    }
+  }
+
+  private registerService(
+    ctx: ScanContext,
+    type: Type,
+    aliases: Type[],
+    definition?: Expression,
+    literal?: boolean,
+  ): void {
+    const source = ctx.source;
+    const path = ctx.path.replace(/\.$/, '');
+    const [factory, object] = this.resolveFactory(type, definition);
     const hooks = this.resolveServiceHooks(definition);
     const scope = this.resolveServiceScope(definition);
-    this.registry.register({ source, id, type, aliases, object, factory, hooks, scope });
+    const id = definition ? path : undefined;
+    this.registry.register({ source, path, id, type, aliases, object, literal, factory, hooks, scope });
   }
 
-  private resolveFactory(definition: Expression): [factory?: ServiceFactoryInfo, object?: boolean] {
+  private registerDecorator(ctx: ScanContext, definition: Expression, nodeType: TypeReferenceNode): void {
+    if (!Node.isObjectLiteralExpression(definition)) {
+      return;
+    }
+
+    const source = ctx.source;
+    const path = ctx.path.replace(/\.$/, '');
+    const [typeArg] = nodeType.getTypeArguments();
+    const type = typeArg.getType();
+    const decorate = this.resolveServiceHook(definition, 'decorate');
+    const hooks = this.resolveServiceHooks(definition);
+    const scope = this.resolveServiceScope(definition);
+    this.registry.decorate({ source, path, type, decorate, scope, hooks });
+  }
+
+  private resolveFactory(type: Type, definition?: Expression): [factory?: ServiceFactoryInfo, object?: boolean] {
+    if (!definition && type.isClass()) {
+      const symbol = type.getSymbolOrThrow();
+      const declaration = symbol.getValueDeclarationOrThrow();
+      return [this.resolveFactoryInfo(symbol.getTypeAtLocation(declaration)), false];
+    }
+
     const [factory, object] = Node.isObjectLiteralExpression(definition)
       ? [definition.getPropertyOrThrow('factory'), true]
       : [definition, false];
-    return [this.resolveFactoryInfo(factory.getType()), object];
+    return [factory && this.resolveFactoryInfo(factory.getType()), object];
   }
 
   private resolveFactoryInfo(factoryType: Type): ServiceFactoryInfo | undefined {
@@ -186,11 +217,7 @@ export class DefinitionScanner {
     const signatures = [...ctors, ...factoryType.getCallSignatures()];
 
     if (!signatures.length) {
-      if (!constructable) {
-        throw new Error(`No call or construct signatures found on service factory`);
-      }
-
-      return { constructable, parameters: [], returnType: factoryType };
+      throw new Error(`No call or construct signatures found on service factory`);
     } else if (signatures.length > 1) {
       throw new Error(`Multiple overloads on service factories aren't supported`);
     }
@@ -208,23 +235,26 @@ export class DefinitionScanner {
     const hooks: ServiceHooks = {};
 
     for (const hook of ['onCreate', 'onFork', 'onDestroy'] as const) {
-      const signature = this.resolveHookSignature(hook, definition.getProperty(hook));
-
-      if (signature) {
-        const [, ...parameters] = signature.getParameters();
-
-        if (parameters.length) {
-          const [, flags] = this.helper.resolveType(signature.getReturnType());
-
-          hooks[hook] = {
-            parameters: parameters.map((p) => this.resolveParameter(p)),
-            async: Boolean(flags & TypeFlag.Async),
-          };
-        }
-      }
+      hooks[hook] = this.resolveServiceHook(definition, hook);
     }
 
     return hooks;
+  }
+
+  private resolveServiceHook(definition: ObjectLiteralExpression, hook: string): ServiceHookInfo | undefined {
+    const signature = this.resolveHookSignature(hook, definition.getProperty(hook));
+
+    if (!signature) {
+      return undefined;
+    }
+
+    const [, ...parameters] = signature.getParameters();
+    const [, flags] = this.helper.resolveType(signature.getReturnType());
+
+    return {
+      parameters: parameters.map((p) => this.resolveParameter(p)),
+      async: Boolean(flags & TypeFlag.Async),
+    };
   }
 
   private resolveHookSignature(type: string, hook?: Node): Signature | undefined {
@@ -259,15 +289,15 @@ export class DefinitionScanner {
       : { name, flags };
   }
 
-  private resolveServiceScope(definition?: Expression): ServiceScope {
+  private resolveServiceScope(definition?: Expression): ServiceScope | undefined {
     if (!Node.isObjectLiteralExpression(definition)) {
-      return 'global';
+      return undefined;
     }
 
     const scopeProp = definition.getProperty('scope');
 
     if (!scopeProp) {
-      return 'global';
+      return undefined;
     } else if (!Node.isPropertyAssignment(scopeProp)) {
       throw new Error(`The 'scope' option must be a simple property assignment`);
     }
@@ -289,4 +319,26 @@ export class DefinitionScanner {
         throw new Error(`Invalid value for 'scope', must be one of 'global', 'local' or 'private'`);
     }
   }
+}
+
+type ScanContext = {
+  source: SourceFile;
+  path: string;
+  exclude?: RegExp;
+};
+
+function createExcludeRegex(patterns?: string[]): RegExp | undefined {
+  if (!patterns || !patterns.length) {
+    return undefined;
+  }
+
+  patterns = patterns
+    .filter((p) => !/(\/|\.tsx?$)/i.test(p))
+    .map((p) => p
+      .replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&')
+      .replace(/\*\*/g, '.+')
+      .replace(/\*/g, '[^.]+')
+    );
+
+  return new RegExp(`^(?:${patterns.join('|')})\.$`);
 }

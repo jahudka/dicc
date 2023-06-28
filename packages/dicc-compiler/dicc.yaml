@@ -1,0 +1,3 @@
+output: src/container.ts
+resources:
+  src/definitions.ts: ~

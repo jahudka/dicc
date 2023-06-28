@@ -1,11 +1,18 @@
 import { ServiceScope } from 'dicc';
 import { Type } from 'ts-morph';
 import { ServiceRegistry } from './serviceRegistry';
-import { ParameterInfo, ServiceDefinitionInfo, TypeFlag } from './types';
+import {
+  ParameterInfo,
+  ServiceDecoratorInfo,
+  ServiceDefinitionInfo,
+  ServiceHooks,
+  TypeFlag,
+} from './types';
 
 export class Autowiring {
   private readonly registry: ServiceRegistry;
-  private readonly visited: Set<ServiceDefinitionInfo> = new Set();
+  private readonly visitedServices: Set<ServiceDefinitionInfo> = new Set();
+  private readonly visitedDecorators: Map<ServiceDecoratorInfo, Set<ServiceScope>> = new Map();
   private readonly resolving: string[] = [];
 
   constructor(registry: ServiceRegistry) {
@@ -13,6 +20,8 @@ export class Autowiring {
   }
 
   checkDependencies(): void {
+    this.registry.applyDecorators();
+
     for (const definition of this.registry.getDefinitions()) {
       this.checkServiceDependencies(definition);
     }
@@ -28,43 +37,101 @@ export class Autowiring {
   }
 
   isAsync(type: Type): boolean {
-    return this.registry.getByType(type).some((def) => def.factory?.async);
+    return this.registry.getByType(type).some((def) => def.async);
   }
 
   private checkServiceDependencies(definition: ServiceDefinitionInfo): void {
-    if (!this.visit(definition)) {
+    if (!this.visitService(definition)) {
       return;
     }
 
+    const scope = this.resolveScope(definition);
+
     if (definition.factory) {
-      for (const parameter of definition.factory.parameters) {
-        if (this.checkParameter(parameter, `service '${definition.id}'`, definition.scope)) {
-          definition.factory.async = true;
-        }
+      if (this.checkParameters(definition.factory.parameters, `service '${definition.id}'`, scope)) {
+        definition.factory.async = true;
+      }
+
+      if (definition.factory.async) {
+        definition.async = true;
       }
     }
 
+    if (this.checkHooks(definition.hooks, `service '${definition.id}'`, scope)) {
+      definition.async = true;
+    }
+
+    const flags = this.checkDecorators(definition.decorators, scope);
+    flags.asyncDecorate && definition.factory && (definition.factory.async = true);
+    flags.asyncDecorate || flags.asyncOnCreate && (definition.async = true);
+  }
+
+  private resolveScope(definition: ServiceDefinitionInfo): ServiceScope {
+    const decoratorWithScope = definition.decorators.findLast((decorator) => decorator.scope !== undefined);
+    return decoratorWithScope?.scope ?? definition.scope ?? 'global';
+  }
+
+  private checkHooks(hooks: ServiceHooks, target: string, scope: ServiceScope): boolean {
     for (const hook of ['onCreate', 'onFork', 'onDestroy'] as const) {
-      const info = definition.hooks[hook];
+      const info = hooks[hook];
 
       if (!info) {
         continue;
       }
 
-      for (const parameter of info.parameters) {
-        if (this.checkParameter(parameter, `'${hook}' hook of service '${definition.id}'`, definition.scope)) {
-          definition.factory && hook === 'onCreate' && (definition.factory.async = true);
-          info.async = true;
-        }
+      if (this.checkParameters(info.parameters, `'${hook}' hook of ${target}`, scope)) {
+        info.async = true;
       }
+    }
+
+    return hooks.onCreate?.async ?? false;
+  }
+
+  private checkDecorators(decorators: ServiceDecoratorInfo[], scope: ServiceScope): DecoratorFlags {
+    const flags: DecoratorFlags = {};
+
+    for (const decorator of decorators) {
+      this.checkDecorator(decorator, scope, flags);
+    }
+
+    return flags;
+  }
+
+  private checkDecorator(decorator: ServiceDecoratorInfo, scope: ServiceScope, flags: DecoratorFlags): void {
+    if (!this.visitDecorator(decorator, scope)) {
+      decorator.decorate?.async && (flags.asyncDecorate = true);
+      decorator.hooks.onCreate?.async && (flags.asyncOnCreate = true);
+      return;
+    }
+
+    if (decorator.decorate) {
+      if (this.checkParameters(decorator.decorate.parameters, `decorator '${decorator.path}'`, scope)) {
+        decorator.decorate.async = true;
+      }
+
+      if (decorator.decorate.async) {
+        flags.asyncDecorate = true;
+      }
+    }
+
+    if (this.checkHooks(decorator.hooks, `decorator '${decorator.path}'`, scope)) {
+      flags.asyncOnCreate = true;
     }
   }
 
-  private checkParameter(
-    parameter: ParameterInfo,
-    target: string,
-    scope: ServiceScope,
-  ): boolean {
+  private checkParameters(parameters: ParameterInfo[], target: string, scope: ServiceScope): boolean {
+    let async = false;
+
+    for (const parameter of parameters) {
+      if (this.checkParameter(parameter, target, scope)) {
+        async = true;
+      }
+    }
+
+    return async;
+  }
+
+  private checkParameter(parameter: ParameterInfo, target: string, scope: ServiceScope): boolean {
     const candidates = parameter.type && this.registry.getByType(parameter.type);
 
     if (!candidates || !candidates.length) {
@@ -72,9 +139,19 @@ export class Autowiring {
         return false;
       }
 
-      throw new Error(`Unable to autowire non-optional parameter '${parameter.name}' of ${target}`);
+      throw new Error(
+        parameter.flags & TypeFlag.Injector
+          ? `Unknown service type in injector '${parameter.name}' of ${target}`
+          : `Unable to autowire non-optional parameter '${parameter.name}' of ${target}`
+      );
     } else if (candidates.length > 1 && !(parameter.flags & (TypeFlag.Array | TypeFlag.Iterable))) {
       throw new Error(`Multiple services for parameter '${parameter.name}' of ${target} found`);
+    } else if (parameter.flags & TypeFlag.Injector) {
+      if (candidates[0].scope === 'private') {
+        throw new Error(`Cannot inject injector for privately-scoped service '${candidates[0].id}' into ${target}`);
+      }
+
+      return false;
     }
 
     let async = false;
@@ -106,6 +183,10 @@ export class Autowiring {
     }
 
     for (const param of definition.hooks?.onCreate?.parameters ?? []) {
+      this.checkParameterDependencies(param);
+    }
+
+    for (const param of definition.decorators.flatMap((d) => [...d.decorate?.parameters ?? [], ...d.hooks.onCreate?.parameters ?? []])) {
       this.checkParameterDependencies(param);
     }
 
@@ -142,12 +223,29 @@ export class Autowiring {
     }
   }
 
-  private visit(definition: ServiceDefinitionInfo): boolean {
-    if (this.visited.has(definition)) {
+  private visitService(definition: ServiceDefinitionInfo): boolean {
+    if (this.visitedServices.has(definition)) {
       return false;
     }
 
-    this.visited.add(definition);
+    this.visitedServices.add(definition);
+    return true;
+  }
+
+  private visitDecorator(decorator: ServiceDecoratorInfo, scope: ServiceScope): boolean {
+    const scopes = this.visitedDecorators.get(decorator) ?? new Set();
+    this.visitedDecorators.set(decorator, scopes);
+
+    if (scopes.has(scope)) {
+      return false;
+    }
+
+    scopes.add(scope);
     return true;
   }
 }
+
+type DecoratorFlags = {
+  asyncDecorate?: boolean;
+  asyncOnCreate?: boolean;
+};

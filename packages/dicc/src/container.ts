@@ -70,8 +70,9 @@ export class Container<Services extends Record<string, any> = {}> {
     }
   }
 
-  register<K extends keyof Services>(id: K, service: Services[K]): PromiseLike<void> | void;
-  register(id: string, service: any): PromiseLike<void> | void {
+  register<K extends keyof Services>(alias: K, service: Services[K]): PromiseLike<void> | void;
+  register(alias: string, service: any): PromiseLike<void> | void {
+    const id = this.resolve(alias);
     const definition = this.definitions.get(id);
 
     if (!definition) {
@@ -104,10 +105,8 @@ export class Container<Services extends Record<string, any> = {}> {
     const store = new Store(parent);
 
     for (const [id, hook] of this.forkHooks) {
-      if (parent.has(id)) {
-        const fork = await hook(parent.get(id), this);
-        fork && store.set(id, fork);
-      }
+      const fork = await hook(await this.get(id), this);
+      fork && store.set(id, fork);
     }
 
     try {
@@ -127,7 +126,7 @@ export class Container<Services extends Record<string, any> = {}> {
       this.aliases.set(id, [id]);
       definition.onFork && this.forkHooks.set(id, definition.onFork);
 
-      for (const alias of definition.aliases) {
+      for (const alias of definition.aliases ?? []) {
         this.aliases.has(alias) || this.aliases.set(alias, []);
         this.aliases.get(alias)!.push(id);
       }
