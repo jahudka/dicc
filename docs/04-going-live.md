@@ -4,6 +4,8 @@ In previous chapters we've talked about the code you need to write; now we'll
 look into how to compile that code into a working container usable at runtime,
 and how to actually use that container.
 
+> This section is outdated! An updated version will be available within 24 hours.
+
 
 ## Compiling a container
 
