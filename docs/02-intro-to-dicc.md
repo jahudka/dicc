@@ -16,7 +16,7 @@ dependencies of each service, but which includes factories capable of obtaining
 the dependencies required to create the services. It depends on static analysis
 of your code in order to achieve this. This approach has some benefits, as well
 as some drawbacks: on the one hand in allows your service code to remain almost
-entirely agnostic to the DI implementation (e.g. no `@decorators` in service
+entirely agnostic to the DI implementation (e.g. no `@Decorators` in service
 code, no special types outside service definitions etc.), but on the other hand
 it imposes some requirements on how you write code. These, however, shouldn't
 be far outside what you'd probably do anyway, so the cost of using DICC should
@@ -29,24 +29,20 @@ be relatively small, and far outweighed by the benefits:
    anyway). Among other things, this means that you don't even need to use DICC
    in tests - you can still construct services and inject their dependencies
    manually if needed.
- - You can define multiple fully independent containers if needed; each
-   container can be independently _forked_, which creates an isolated context
-   available during the execution of an asynchronous call chain.
  - DICC supports some features that few, if any, other frameworks currently
-   offer, including async services, service accessors, and lists / iterables of
-   services.
+   offer, including async services, service accessors and injectors, and lists /
+   iterables of services.
  - The compiled container is a regular TypeScript file which you can easily
    examine to figure out exactly what DICC is doing.
 
-The main pain point of using DICC is that you must write a separate _service
-definition_ for each service. This is typically done in a separate file (or
-files) from where the service class is declared. It can look like a lot of extra
-work, but in most cases, a service definition is a single line of code - and it
-means that all the code which is required to make DI work is kept separate from
-the actual service implementation. The hope is that in the future DICC will
-evolve to being able to discover most simple services automatically, so that
-explicit service definitions will shrink to just a few complex cases, overrides
-and similar.
+The main pain point of using DICC is writing service definitions. The goal of
+DICC is to help you keep DI-related code separate from the actual service code;
+this usually means creating one or more extra files somewhere in your project.
+In the simplest cases (which should also be the most frequent), DICC can
+extrapolate a service definition from the service's class declaration, and you
+can simply re-export these from within your resource files (or even point to
+them directly from within the DICC config file); in more complex cases you need
+to write a _service definition_, which is a simple `satisfies` expression.
 
 
 ## Dependency injection using DICC
@@ -78,15 +74,15 @@ This is useful e.g. for injecting configuration into services.
 Service factories also make it possible for services to be _optional_ - a
 factory function can decide, based on e.g. its dependencies, that a particular
 service can't or shouldn't be created, and return `undefined` instead. This
-can be used to define things like different logger implementations based on
-local vs. production environment and similar.
+can be used to define things like different logger backends based on local vs.
+production environment and similar.
 
 
 ## Service and dependency types
 
 TypeScript is a _structurally_-typed language, meaning that one thing is
 assignable to another if its structure matches the structure of the target.
-Other languages, for example PHP, employ _nominal_ types, where one thing is
+Other languages, for example PHP, employ _nominal_ typing, where one thing is
 assignable to another if and only if its type corresponds to the same type
 declaration as the target - for example, imagine you have declared two
 interfaces with the exact same shape, and a class which implements one of them -
@@ -105,10 +101,12 @@ types that the actual service type must conform to _structurally_ (but doesn't
 need to explicitly list in e.g. `implements` clauses), which are then also
 considered when resolving injection.
 
-Currently, DICC doesn't automatically add aliases for interfaces which services
-explicitly list in their `implements` clause, and nor does it consider class
-inheritance - a service's only type, unless you explicitly add some aliases, is
-the type specified in its definition.
+When the DICC compiler encounters a class declaration in a resource file, it
+will add any interfaces explicitly implemented by the class as aliases; it will
+also add all ancestor classes and their explicitly listed interfaces. When a
+service has an explicit service definition, only aliases explicitly listed
+in the definition will be applied, regardless of which interfaces and ancestor
+classes the service implements or extends.
 
 
 ## DICC speak
@@ -128,22 +126,23 @@ In this section we'll look at some terms used in the rest of the documentation:
    the compilation - and the names of service and alias types are used in the
    compiled container code (suffixed with a number to ensure two distinct types
    with the same name don't conflict). Using type aliases would therefore result
-   in a lot of `Anonymous.<number>` strings in your compiled container, making
+   in a lot of `#Anonymous.<number>` strings in your compiled container, making
    it much less readable.
  - A **factory** is a callable or constructable which returns a service.
  - A **service ID** is a unique identifier of a service. Service IDs are derived
    from the path to the service definition in the definition tree exported from
-   a definition file.
+   a definition file. Services which don't have an explicit service definition
+   don't have service IDs.
  - An **alias**, as mentioned, is an extra type that you want the DICC compiler
    to consider when resolving injection. Each service can have zero or more
    aliases and the service type must structurally conform to each of them.
-   Aliases are specified in the service definition, rather than directly in the
-   service code (e.g. in the service class declaration), meaning that you can
-   add extra aliases to e.g. 3rd-party services without touching their code or
-   needing to extend them to add an `implements` clause.
- - A **service definition** is the mechanism by which you tell DICC about a
+   Aliases can be specified in the service definition, rather than directly in
+   the service code (e.g. in the service class declaration), meaning that you
+   can add extra aliases to e.g. 3rd-party services without touching their code
+   or needing to extend them to add an `implements` clause.
+ - A **service definition** is a mechanism by which you tell DICC about a
    service which exists in your application. Service definitions must be
-   exported (or re-exported) from a _definition file_, which serves as the main
+   exported (or re-exported) from a _resource file_, which serves as the main
    input to the DICC compiler. Each definition corresponds to exactly one
    service (meaning it isn't possible to e.g. define a bunch of services in a
    batch by iterating over an array). The definition itself is any value
@@ -216,6 +215,13 @@ In this section we'll look at some terms used in the rest of the documentation:
    container directly; rather, you will always obtain a Promise which you will
    need to await. DICC will do it for you automatically when injecting the
    service as a dependency.
+ - A **service decorator** is a special definition you can export from one of
+   your resource files; similarly to a service definition, it is a `satisfies`
+   expression. A service decorator always targets a specific service type, and
+   will be applied by the compiler to all services which match that type.
+   Service decorators can modify a service's scope, they can register additional
+   hooks, and they can even wrap the service factory and alter the service
+   instance itself, if needed.
 
 **Next**: [Services and dependencies][2]
 

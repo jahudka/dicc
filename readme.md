@@ -26,28 +26,35 @@ they are coming and you cannot get out and you don't have Gandalf and
 &lt;zen&gt;
 
 DICC can't do the pointy hat trick, but it does offer an alternative solution
-to dependency injection. You write a simple _definition file_ in plain
-TypeScript, that is, a standard `.ts` file with some `export const ... = ...`
-statements, and then you point DICC to that file and DICC will produce a
-_compiled file_, which exports a fully typed and autowired dependency injection
-container.
+to dependency injection. Using a simple YAML config file, you specify one or
+more _resource files_, which are regular TypeScript files inside your project.
+From these resource files you export some classes, interfaces, and possibly some
+constant expressions, and then you point the DICC CLI to your config file and
+DICC will produce a _compiled file_, which exports a fully typed and autowired
+dependency injection container.
 
 The only place in your code you will ever `import { anything } from 'dicc'`
-will be inside the definition file (or files).
+will be inside the resource file (or files).
 
 ## Highlights
  - type-based autowiring, doesn't care about type or parameter names
  - supports multiple services of the same type
- - supports _async_ services (that is, services which need to be created
-   asynchronously)
+ - first-class support for _async_ services (that is, services which need to be
+   created asynchronously)
  - supports _scoped_ services private to a given asynchronous execution
    context, as well as fully private services
  - supports _dynamic_ services which are known to the container, but must be
    registered manually in order to be available as dependencies to other
    services
+ - supports _service decorators_ (not the same thing as `@Decorators`) which
+   allow some modifications to service definitions without needing to alter the
+   definitions themselves
  - compiles to regular TypeScript which you can easily examine to see what's
    going on under the hood
- - no special compiler flags, no `reflect-metadata`, minimal runtime footprint
+ - cyclic dependency checks run on compile time, preventing possible deadlocks
+   at runtime
+ - no special compiler flags, no `reflect-metadata`, no junk in your source
+   code, minimal runtime footprint
 
 
 ## Installation
