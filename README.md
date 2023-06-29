@@ -2,7 +2,7 @@
 
 > **_Dependency Injection Container Compiler_**
 
-## [**Documentation**][1]
+## [Documentation][1]
 
 ## About
 
