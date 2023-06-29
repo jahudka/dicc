@@ -6,30 +6,32 @@ and how to actually use that container.
 
 > This section is outdated! An updated version will be available within 24 hours.
 
+## `dicc.yaml`
+
+The DICC config file is a simple YAML file with only a couple of options. The
+following snippet gives a complete reference, along with defaults where
+applicable:
+
+```yaml
+project: './tsconfig.json'  # path to your project's tsconfig.json
+output: ~  # required; path to the output file which should contain the compiled code
+name: 'container'  # the name of the exported container from the output file
+map: 'Services'  # the name of the exported interface which maps service IDs and aliases to their types
+resources:  # required; a map of <path>: [options] pairs
+  'src/example.ts': ~  # no options
+  'src/examples/**/*.ts':  # globs are supported
+    exclude:  # exclude files or exported paths from scanning:
+      - '**/__tests__/**'  # you can exclude by path
+      - 'path.to.NonServiceClass'  # or by object path
+```
 
 ## Compiling a container
 
 Whenever you change service definitions you must re-run the compiler in order
 to get a matching container. This is done using the `dicc` executable shipped
-with DICC. The executable takes the following options:
-
-- `-i` / `--input`: **required**, the path to the module which exports your
-  definitions.
-- `-o` / `--output`: **required**, the path to the module which should contain
-  the compiled container. This file will be overwritten! Do **not** point this
-  to the file containing your definitions.
-- `-p` / `--project`: the path to `tsconfig.json`. Defaults to
-  `./tsconfig.json`.
-- `-e` / `--export`: the name of the variable holding the compiled container
-  instance exported from the compiled module. Defaults to `container`.
-- `-m` / `--map`: the name of the interface used to give the compiled container
-  the appropriate typings. Defaults to `Services`.
-
-Example:
-
-```shell
-node_modules/.bin/dicc -i src/di/definitions/index.ts -o src/di/index.ts
-```
+with DICC. The executable takes a single optional argument, which is the path
+to the DICC config file; by default, it is assumed to be `dicc.yaml` in the
+current working directory.
 
 The compiled container should be a deterministic product of your definitions,
 so you can safely exclude it from version control. But versioning it probably

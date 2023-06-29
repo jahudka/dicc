@@ -336,8 +336,8 @@ function createExcludeRegex(patterns?: string[]): RegExp | undefined {
     .filter((p) => !/(\/|\.tsx?$)/i.test(p))
     .map((p) => p
       .replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&')
-      .replace(/\*\*/g, '.+')
-      .replace(/\*/g, '[^.]+')
+      .replace(/\*\*/g, '.*')
+      .replace(/\*/g, '[^.]*')
     );
 
   return new RegExp(`^(?:${patterns.join('|')})\.$`);
