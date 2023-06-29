@@ -1,10 +1,8 @@
-# Going live
+# DICC config and compilation
 
 In previous chapters we've talked about the code you need to write; now we'll
 look into how to compile that code into a working container usable at runtime,
 and how to actually use that container.
-
-> This section is outdated! An updated version will be available within 24 hours.
 
 ## `dicc.yaml`
 
@@ -13,14 +11,32 @@ following snippet gives a complete reference, along with defaults where
 applicable:
 
 ```yaml
-project: './tsconfig.json'  # path to your project's tsconfig.json
-output: ~  # required; path to the output file which should contain the compiled code
-name: 'container'  # the name of the exported container from the output file
-map: 'Services'  # the name of the exported interface which maps service IDs and aliases to their types
-resources:  # required; a map of <path>: [options] pairs
-  'src/example.ts': ~  # no options
-  'src/examples/**/*.ts':  # globs are supported
-    exclude:  # exclude files or exported paths from scanning:
+# path to your project's tsconfig.json:
+project: './tsconfig.json'
+
+# required; path to the output file
+# which should contain the compiled code:
+output: ~
+
+# any text to add at the beginning of the compiled
+# output file; useful for e.g. an eslint-disable comment:
+preamble: ~
+
+# the export name of the compiled container instance:
+name: 'container'
+
+# the export name of the compiled interface which
+# maps service IDs and aliases to their types:
+map: 'Services'
+
+# required; a map of <path>: [options] pairs:
+resources:
+  # a single file with no options;
+  'src/example.ts': ~
+  # multiple files can be selected using globs:
+  'src/examples/**/*.ts':
+    # exclude files or exported paths from scanning:
+    exclude:
       - '**/__tests__/**'  # you can exclude by path
       - 'path.to.NonServiceClass'  # or by object path
 ```

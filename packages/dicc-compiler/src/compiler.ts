@@ -5,7 +5,8 @@ import { ServiceRegistry } from './serviceRegistry';
 import { SourceFiles } from './sourceFiles';
 import {
   DiccConfig,
-  ParameterInfo, ServiceDecoratorInfo,
+  ParameterInfo,
+  ServiceDecoratorInfo,
   ServiceDefinitionInfo,
   ServiceHookInfo,
   TypeFlag,
@@ -38,6 +39,10 @@ export class Compiler {
     this.writeHeader(sources);
     this.writeMap(definitions, sources);
     this.writeDefinitions(definitions, sources);
+
+    if (this.config.preamble !== undefined) {
+      this.output.insertText(0, this.config.preamble.replace(/\s*$/, '\n\n'));
+    }
   }
 
   private writeHeader(sources: Map<SourceFile, string>): void {

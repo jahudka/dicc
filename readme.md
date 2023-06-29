@@ -2,6 +2,10 @@
 
 > **_Dependency Injection Container Compiler_**
 
+[**Documentation**][1]
+
+## About
+
 This is a project to _end_ all current TypeScript DI implementations.
 I mean it. **All of them**. With extreme prejudice.
 
@@ -76,20 +80,8 @@ npm i --save dicc
 ## Example usage
 
 The DICC compiler actually uses DICC itself, so you can look at its source code
-to see a simple real-world example of [service definitions][5] and the resulting
-[compiled container][6], as well as of how the container is [used][7].
-
-
-## Documentation
-
- - [Intro to Dependency Injection][1] - a general overview of core dependency
-   injection principles
- - [Intro to DICC][2] - basic introduction to DICC and how it was designed
-   to work
- - [Services and dependencies][3] - how to write service definitions for the
-   DICC compiler and how to specify dependencies
- - [Going live][4] - how to compile a container from the service definitions
-   and how to use the container at runtime
+to see a simple real-world example of [service definitions][2] and the resulting
+[compiled container][3], as well as of how the container is [used][4].
 
 
 ## Contributing
@@ -104,10 +96,7 @@ new features. There's no formal code style, if I have an issue with your
 indentation or something, I'll just fix it.
 
 
-[1]: https://github.com/jahudka/dicc/blob/main/docs/01-intro-to-di.md
-[2]: https://github.com/jahudka/dicc/blob/main/docs/02-intro-to-dicc.md
-[3]: https://github.com/jahudka/dicc/blob/main/docs/03-services-and-dependencies.md
-[4]: https://github.com/jahudka/dicc/blob/main/docs/04-going-live.md
-[5]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/definitions.ts
-[6]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/container.ts
-[7]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/cli.ts
+[1]: https://jahudka.github.io/dicc/
+[2]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/definitions.ts
+[3]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/container.ts
+[4]: https://github.com/jahudka/dicc/blob/main/packages/dicc-compiler/src/cli.ts

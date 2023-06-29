@@ -1,0 +1,9 @@
+- [Home](/)
+- User docs
+  - [Intro to DI](user/01-intro-to-di.md)
+  - [Intro to DICC](user/02-intro-to-dicc.md)
+  - [Services and dependencies](user/03-services-and-dependencies.md)
+  - [Config and compilation](user/04-config-and-compilation.md)
+- Developer docs
+  - coming soon
+- [GitHub](https://github.com/jahudka/dicc)

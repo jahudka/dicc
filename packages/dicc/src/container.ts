@@ -70,7 +70,7 @@ export class Container<Services extends Record<string, any> = {}> {
     }
   }
 
-  register<K extends keyof Services>(alias: K, service: Services[K]): PromiseLike<void> | void;
+  register<K extends keyof Services>(alias: K, service: Services[K], force?: boolean): PromiseLike<void> | void;
   register(alias: string, service: any): PromiseLike<void> | void {
     const id = this.resolve(alias);
     const definition = this.definitions.get(id);
@@ -118,6 +118,21 @@ export class Container<Services extends Record<string, any> = {}> {
         store.delete(id);
       }
     }
+  }
+
+  async reset(): Promise<void> {
+    if (this.currentStore !== this.globalServices) {
+      throw new Error(`Only the global container instance can be reset, this is a fork`);
+    }
+
+    for (const [id, definition] of this.definitions) {
+      if (this.globalServices.has(id)) {
+        definition.onDestroy && await definition.onDestroy(this.globalServices.get(id), this);
+        this.globalServices.delete(id);
+      }
+    }
+
+    this.globalServices.clear();
   }
 
   private importDefinitions(definitions: CompiledServiceDefinitionMap<Services>): void {

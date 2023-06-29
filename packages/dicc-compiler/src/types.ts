@@ -9,6 +9,7 @@ const resourceSchema = z.strictObject({
 export const diccConfigSchema = z.strictObject({
   project: z.string().default('./tsconfig.json'),
   output: z.string(),
+  preamble: z.string().optional(),
   name: z.string().regex(/^[a-z$_][a-z0-9$_]*$/i, 'Invalid identifier').default('container'),
   map: z.string().regex(/^[a-z$_][a-z0-9$_]*$/i, 'Invalid identifier').default('Services'),
   resources: z.record(resourceSchema.optional().nullable()),

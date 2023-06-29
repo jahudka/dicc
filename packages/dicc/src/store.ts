@@ -26,6 +26,10 @@ export class Store {
     this.services.delete(id);
   }
 
+  clear(): void {
+    this.services.clear();
+  }
+
   [Symbol.iterator](): IterableIterator<[string, any]> {
     return this.services.entries();
   }

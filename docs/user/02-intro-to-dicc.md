@@ -225,5 +225,5 @@ In this section we'll look at some terms used in the rest of the documentation:
 
 **Next**: [Services and dependencies][2]
 
-[1]: ./01-intro-to-di.md
-[2]: ./03-services-and-dependencies.md
+[1]: user/01-intro-to-di.md
+[2]: user/03-services-and-dependencies.md

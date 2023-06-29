@@ -400,6 +400,6 @@ the service's type, although I will have to think hard on all the ramifications
 of such a capability.
 
 
-**Next**: [Going live][1]
+**Next**: [Config and compilation][1]
 
-[1]: ./04-going-live.md
+[1]: user/04-config-and-compilation.md

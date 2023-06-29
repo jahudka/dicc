@@ -80,4 +80,4 @@ the `EmailAlertSender` class would implement this interface.
 
 **Next**: [Intro to DICC][1]
 
-[1]: ./02-intro-to-dicc.md
+[1]: user/02-intro-to-dicc.md
