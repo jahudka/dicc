@@ -66,12 +66,13 @@ export class Compiler {
     this.output.addStatements((writer) => {
       writer.writeLine(`\nexport interface ${this.config.map} {`);
 
-      const aliasMap: Map<string, string[]> = new Map();
+      const aliasMap: Map<string, Set<string>> = new Map();
 
       writer.indent(() => {
-        for (const { source, id, path, type, aliases, async, explicit } of definitions) {
-          const fullPath = `${sources.get(source)}.${path}`;
-          const serviceType = !explicit ? fullPath : `ServiceType<typeof ${fullPath}>`;
+        for (const { source, id, path, type, aliases, factory, async, explicit } of definitions) {
+          const method = !explicit && factory?.method !== 'constructor' && factory?.method;
+          const fullPath = join('.', sources.get(source), path, method);
+          const serviceType = !explicit && !method ? fullPath : `ServiceType<typeof ${fullPath}>`;
           const fullType = async ? `Promise<${serviceType}>` : serviceType;
           !/^#/.test(id) && writer.writeLine(`'${id}': ${fullType};`);
 
@@ -79,24 +80,24 @@ export class Compiler {
             const alias = this.registry.getTypeId(typeAlias);
 
             if (alias !== undefined) {
-              aliasMap.has(alias) || aliasMap.set(alias, []);
-              aliasMap.get(alias)!.push(fullType);
+              aliasMap.has(alias) || aliasMap.set(alias, new Set());
+              aliasMap.get(alias)!.add(fullType);
             }
           }
         }
 
         for (const [alias, ids] of [...aliasMap].sort((a, b) => compareIDs(a[0], b[0]))) {
-          if (ids.length > 1) {
+          if (ids.size > 1) {
             writer.writeLine(`'${alias}':`);
             writer.indent(() => {
-              let n = ids.length;
+              let n = ids.size;
 
               for (const id of ids) {
                 writer.writeLine(`| ${id}${--n ? '' : ';'}`);
               }
             });
           } else {
-            writer.writeLine(`'${alias}': ${ids.join('')};`);
+            writer.writeLine(`'${alias}': ${[...ids].join('')};`);
           }
         }
       });

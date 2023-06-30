@@ -24,7 +24,19 @@ export class SourceFiles {
   }
 
   getInputs(resource: string): SourceFile[] {
-    return this.inputs.get(resource) ?? [];
+    const inputs = this.inputs.get(resource);
+
+    if (!inputs) {
+      throw new Error(`Unknown resource: '${resource}'`);
+    } else if (!inputs.length) {
+      if (resource.includes('*')) {
+        console.log(`Warning: resource '${resource}' didn't match any files`);
+      } else {
+        throw new Error(`Resource '${resource}' doesn't exist`);
+      }
+    }
+
+    return inputs;
   }
 
   getOutput(): SourceFile {

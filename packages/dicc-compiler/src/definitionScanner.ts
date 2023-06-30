@@ -145,11 +145,7 @@ export class DefinitionScanner {
   }
 
   private scanVariableDeclaration(ctx: ScanContext, node: VariableDeclaration): void {
-    const initializer = node.getInitializer();
-
-    if (Node.isSatisfiesExpression(initializer)) {
-      this.scanSatisfiesExpression(ctx, initializer);
-    }
+    this.scanNode(ctx, node.getInitializer());
   }
 
   private scanSatisfiesExpression(ctx: ScanContext, node: SatisfiesExpression): void {
@@ -327,8 +323,8 @@ function createExcludeRegex(patterns?: string[]): RegExp | undefined {
     .filter((p) => !/(\/|\.tsx?$)/i.test(p))
     .map((p) => p
       .replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&')
-      .replace(/\*\*/g, '.*')
-      .replace(/\*/g, '[^.]*')
+      .replace(/\\\*\\\*/g, '.*')
+      .replace(/\\\*/g, '[^.]*')
     );
 
   return new RegExp(`^(?:${patterns.join('|')})\.$`);
