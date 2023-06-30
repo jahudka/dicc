@@ -69,9 +69,9 @@ export class Compiler {
       const aliasMap: Map<string, string[]> = new Map();
 
       writer.indent(() => {
-        for (const { source, id, path, type, aliases, async, literal } of definitions) {
+        for (const { source, id, path, type, aliases, async, explicit } of definitions) {
           const fullPath = `${sources.get(source)}.${path}`;
-          const serviceType = literal ? fullPath : `ServiceType<typeof ${fullPath}>`;
+          const serviceType = !explicit ? fullPath : `ServiceType<typeof ${fullPath}>`;
           const fullType = async ? `Promise<${serviceType}>` : serviceType;
           !/^#/.test(id) && writer.writeLine(`'${id}': ${fullType};`);
 
@@ -147,14 +147,14 @@ export class Compiler {
       }
 
       if (factory) {
-        if (!object && !factory.constructable && !factory.parameters.length && !decoratorMap.decorate.length) {
-          writer.writeLine(`factory: ${src}.${path},`);
-        } else if (!object || factory.constructable || factory.parameters.length || decoratorMap.decorate.length) {
+        if (!object && factory.method !== 'constructor' && !factory.parameters.length && !decoratorMap.decorate.length) {
+          writer.writeLine(`factory: ${join('.', src, path, factory.method)},`);
+        } else if (!object || factory.method === 'constructor' || factory.parameters.length || decoratorMap.decorate.length) {
           this.compileFactory(
             src,
             path,
             factory.async,
-            factory.constructable,
+            factory.method,
             object,
             factory.returnType.isNullable(),
             factory.parameters,
@@ -183,7 +183,7 @@ export class Compiler {
     source: string,
     path: string,
     async: boolean | undefined,
-    constructable: boolean | undefined,
+    method: string | undefined,
     object: boolean | undefined,
     optional: boolean,
     parameters: ParameterInfo[],
@@ -200,7 +200,12 @@ export class Compiler {
 
     const writeFactoryCall = () => {
       this.compileCall(
-        [constructable && 'new', async && !!decorators.length && 'await', `${source}.${path}${object ? '.factory' : ''}`],
+        join(
+          ' ',
+          method === 'constructor' && 'new',
+          async && decorators.length && 'await',
+          join('.', source, path, object && 'factory', method !== 'constructor' && method),
+        ),
         params,
         writer,
       );
@@ -228,7 +233,7 @@ export class Compiler {
         const last = i + 1 >= decorators.length;
         writer.conditionalWrite(optional || (i > 0 ? decParams[i - 1] : params).length > 0 || decParams[i].length > 0, '\n');
         writer.write(last ? 'return ' : 'service = ');
-        this.compileCall([info.async && !last && 'await', `${source}.${path}.decorate`], ['service', ...decParams[i]], writer);
+        this.compileCall(join(' ', info.async && !last && 'await', join('.', source, path, 'decorate')), ['service', ...decParams[i]], writer);
         writer.write(';\n');
       }
     });
@@ -256,7 +261,7 @@ export class Compiler {
     writer.write(') => ');
 
     if (!decorators.length) {
-      this.compileCall([`${source}.${path}.${hook}`], ['service', ...params], writer);
+      this.compileCall(join('.', source, path, hook), ['service', ...params], writer);
       writer.write(',\n');
       return;
     }
@@ -272,13 +277,13 @@ export class Compiler {
           service = 'fork ?? service';
         }
 
-        this.compileCall([info?.async && 'await', `${source}.${path}.${hook}`], ['service', ...params], writer);
+        this.compileCall(join(' ', info?.async && 'await', join('.', source, path, hook)), ['service', ...params], writer);
         writer.write(';\n');
       }
 
       for (const [i, [source, path, info]] of decorators.entries()) {
         writer.conditionalWrite((i > 0 ? decParams[i - 1] : params).length > 0 || decParams[i].length > 0, '\n');
-        this.compileCall([info.async && 'await', `${source}.${path}.${hook}`], [service, ...decParams[i]], writer);
+        this.compileCall(join(' ', info.async && 'await', join('.', source, path, hook)), [service, ...decParams[i]], writer);
         writer.write(';\n');
       }
 
@@ -291,8 +296,8 @@ export class Compiler {
     writer.write('},\n');
   }
 
-  private compileCall(expression: (string | boolean | undefined)[], params: string[], writer: CodeBlockWriter): void {
-    writer.write(expression.filter((v) => typeof v === 'string').join(' '));
+  private compileCall(expression: string, params: string[], writer: CodeBlockWriter): void {
+    writer.write(expression);
     writer.write('(');
 
     if (params.length > 1) {
@@ -402,4 +407,8 @@ function extractSources(definitions: ServiceDefinitionInfo[]): Map<SourceFile, s
   return new Map([
     ...new Set(definitions.flatMap((d) => [d.source, ...d.decorators.map((o) => o.source)])),
   ].map((s, i) => [s, `defs${i}`]));
+}
+
+function join(separator: string, ...tokens: (string | 0 | false | undefined)[]): string {
+  return tokens.filter((t) => typeof t === 'string').join(separator);
 }

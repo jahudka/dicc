@@ -4,6 +4,7 @@ import {
   InterfaceDeclaration,
   Node,
   PropertyName,
+  Signature,
   SourceFile,
   SyntaxKind,
   Type,
@@ -184,6 +185,45 @@ export class TypeHelper {
     }
 
     return types;
+  }
+
+  resolveFactorySignature(factory: Type): [signature: Signature, method?: string] {
+    const ctors = factory.getConstructSignatures();
+
+    if (!ctors.length) {
+      return [this.getFirstSignature(factory.getCallSignatures())];
+    }
+
+    const publicCtors = ctors.filter((ctor) => {
+      try {
+        const declaration = ctor.getDeclaration();
+
+        return Node.isConstructorDeclaration(declaration)
+          && !declaration.hasModifier(SyntaxKind.PrivateKeyword)
+          && !declaration.hasModifier(SyntaxKind.ProtectedKeyword)
+      } catch {
+        return true; // this would happen if a class has no explicit constructor -
+                     // in that case we'd get a construct signature, but no declaration
+      }
+    });
+
+    if (!publicCtors.length) {
+      const cprop = factory.getProperty('create');
+      const csig = cprop?.getTypeAtLocation(cprop.getValueDeclarationOrThrow()).getCallSignatures();
+      return [this.getFirstSignature(csig ?? []), 'create'];
+    }
+
+    return [this.getFirstSignature(publicCtors), 'constructor'];
+  }
+
+  private getFirstSignature([first, ...rest]: Signature[]): Signature {
+    if (!first) {
+      throw new Error(`No call or construct signatures found on service factory`);
+    } else if (rest.length) {
+      throw new Error(`Multiple overloads on service factories aren't supported`);
+    }
+
+    return first;
   }
 
   resolveRootType(type: Type): Type {

@@ -133,7 +133,7 @@ export class DefinitionScanner {
       return;
     }
 
-    this.registerService(ctx, node.getType(), this.helper.resolveClassTypes(node), undefined, true);
+    this.registerService(ctx, node.getType(), this.helper.resolveClassTypes(node));
   }
 
   private scanInterfaceDeclaration(ctx: ScanContext, node: InterfaceDeclaration): void {
@@ -141,7 +141,7 @@ export class DefinitionScanner {
       return;
     }
 
-    this.registerService(ctx, node.getType(), this.helper.resolveInterfaceTypes(node), undefined, true);
+    this.registerService(ctx, node.getType(), this.helper.resolveInterfaceTypes(node));
   }
 
   private scanVariableDeclaration(ctx: ScanContext, node: VariableDeclaration): void {
@@ -168,7 +168,6 @@ export class DefinitionScanner {
     type: Type,
     aliases: Type[],
     definition?: Expression,
-    literal?: boolean,
   ): void {
     const source = ctx.source;
     const path = ctx.path.replace(/\.$/, '');
@@ -176,7 +175,8 @@ export class DefinitionScanner {
     const hooks = this.resolveServiceHooks(definition);
     const scope = this.resolveServiceScope(definition);
     const id = definition ? path : undefined;
-    this.registry.register({ source, path, id, type, aliases, object, literal, factory, hooks, scope });
+    const explicit = !!definition;
+    this.registry.register({ source, path, id, type, aliases, object, explicit, factory, hooks, scope });
   }
 
   private registerDecorator(ctx: ScanContext, definition: Expression, nodeType: TypeReferenceNode): void {
@@ -212,19 +212,10 @@ export class DefinitionScanner {
       return undefined;
     }
 
-    const ctors = factoryType.getConstructSignatures();
-    const constructable = ctors.length > 0;
-    const signatures = [...ctors, ...factoryType.getCallSignatures()];
-
-    if (!signatures.length) {
-      throw new Error(`No call or construct signatures found on service factory`);
-    } else if (signatures.length > 1) {
-      throw new Error(`Multiple overloads on service factories aren't supported`);
-    }
-
-    const [returnType, async] = this.helper.resolveServiceType(signatures[0].getReturnType());
-    const parameters = signatures[0].getParameters().map((param) => this.resolveParameter(param));
-    return { parameters, returnType, constructable, async };
+    const [signature, method] = this.helper.resolveFactorySignature(factoryType);
+    const [returnType, async] = this.helper.resolveServiceType(signature.getReturnType());
+    const parameters = signature.getParameters().map((param) => this.resolveParameter(param));
+    return { parameters, returnType, method, async };
   }
 
   private resolveServiceHooks(definition?: Expression): ServiceHooks {
