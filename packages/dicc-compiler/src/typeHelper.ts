@@ -135,12 +135,12 @@ export class TypeHelper {
   }
 
   resolveClassTypes(declaration: ClassDeclaration): Type[] {
-    const types: Type[] = [];
+    const types: Set<Type> = new Set();
     let cursor: ClassDeclaration | undefined = declaration;
 
     while (cursor) {
       for (const ifc of cursor.getImplements()) {
-        types.push(ifc.getType());
+        types.add(ifc.getType());
 
         const impl = ifc.getExpression();
 
@@ -153,38 +153,41 @@ export class TypeHelper {
               : []
           );
 
-          parents.length && types.push(...parents);
+          for (const parent of parents) {
+            types.add(parent);
+          }
         }
       }
 
-      const parent = cursor.getBaseClass();
-      parent && types.push(parent.getType());
+      const parent: ClassDeclaration | undefined = cursor.getBaseClass();
+      parent && types.add(parent.getType());
       cursor = parent;
     }
 
-    return types;
+    return [...types];
   }
 
   resolveInterfaceTypes(declaration: InterfaceDeclaration): Type[] {
-    const types: Type[] = [];
+    const types: Set<Type> = new Set();
     const queue: (ClassDeclaration | InterfaceDeclaration | TypeAliasDeclaration)[] = [declaration];
     let cursor: ClassDeclaration | InterfaceDeclaration | TypeAliasDeclaration | undefined;
 
     while (cursor = queue.shift()) {
       if (Node.isClassDeclaration(cursor)) {
-        const classTypes = this.resolveClassTypes(cursor);
-        classTypes.length && types.push(...classTypes);
+        for (const classType of this.resolveClassTypes(cursor)) {
+          types.add(classType);
+        }
       } else if (Node.isInterfaceDeclaration(cursor)) {
         for (const ifc of cursor.getBaseDeclarations()) {
-          types.push(ifc.getType());
+          types.add(ifc.getType());
           queue.push(ifc);
         }
       } else {
-        types.push(cursor.getType());
+        types.add(cursor.getType());
       }
     }
 
-    return types;
+    return [...types];
   }
 
   resolveFactorySignature(factory: Type): [signature: Signature, method?: string] {
