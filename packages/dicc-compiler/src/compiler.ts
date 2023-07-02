@@ -72,7 +72,9 @@ export class Compiler {
         for (const { source, id, path, type, aliases, factory, async, explicit } of definitions) {
           const method = !explicit && factory?.method !== 'constructor' && factory?.method;
           const fullPath = join('.', sources.get(source), path, method);
-          const serviceType = !explicit && !method ? fullPath : `ServiceType<typeof ${fullPath}>`;
+          const serviceType = !explicit && !method && !path.includes('.')
+            ? fullPath
+            : `ServiceType<typeof ${fullPath}>`;
           const fullType = async ? `Promise<${serviceType}>` : serviceType;
           !/^#/.test(id) && writer.writeLine(`'${id}': ${fullType};`);
 
@@ -124,10 +126,11 @@ export class Compiler {
   }
 
   private compileDefinition(
-    { source, id, path, type, factory, scope = 'global', async, object, hooks, aliases, decorators }: ServiceDefinitionInfo,
+    { source, id, path, type, factory, scope = 'global', tags, async, object, hooks, aliases, decorators }: ServiceDefinitionInfo,
     sources: Map<SourceFile, string>,
     writer: CodeBlockWriter,
   ): void {
+    const decoratorMap = getDecoratorMap(decorators, sources);
     const src = sources.get(source)!;
     writer.writeLine(`'${id}': {`);
 
@@ -141,10 +144,20 @@ export class Compiler {
       writer.conditionalWriteLine(types.length > 0, `aliases: [${types.join(`, `)}],`);
       writer.conditionalWriteLine(async, `async: true,`);
 
-      const decoratorMap = getDecoratorMap(decorators, sources);
-
       if (decoratorMap.scope && decoratorMap.scope !== scope) {
         writer.writeLine(`scope: '${decoratorMap.scope}',`);
+      }
+
+      if (decoratorMap.tags.length) {
+        writer.writeLine(`tags: {`);
+        writer.indent(() => {
+          tags && writer.writeLine(`...${src}.${path}.tags,`);
+
+          for (const decTags of decoratorMap.tags) {
+            writer.writeLine(`...${decTags},`);
+          }
+        });
+        writer.writeLine(`},`);
       }
 
       if (factory) {
@@ -214,6 +227,7 @@ export class Compiler {
 
     if (!decorators.length) {
       writeFactoryCall();
+      writer.write(',\n');
       return;
     }
 
@@ -332,6 +346,10 @@ export class Compiler {
   }
 
   private compileParameter(param: ParameterInfo): string | undefined {
+    if (param.flags & TypeFlag.Container) {
+      return 'di';
+    }
+
     const id = param.type && this.autowiring.getTypeId(param.type);
 
     if (!param.type || id === undefined) {
@@ -356,7 +374,7 @@ export class Compiler {
     }
 
     if (paramWantsAccessor) {
-      prefix = '() => ';
+      prefix = `${paramWantsPromise ? 'async ' : ''}() => `;
     } else if (paramWantsIterable) {
       method = 'iterate';
     } else if (!paramWantsPromise && valueIsAsync) {
@@ -374,6 +392,7 @@ type DecoratorInfo = [source: string, path: string, info: ServiceHookInfo];
 
 type DecoratorMap = {
   scope?: ServiceScope;
+  tags: string[];
   decorate: DecoratorInfo[];
   onCreate: DecoratorInfo[];
   onFork: DecoratorInfo[];
@@ -382,6 +401,7 @@ type DecoratorMap = {
 
 function getDecoratorMap(decorators: ServiceDecoratorInfo[], sources: Map<SourceFile, string>): DecoratorMap {
   const map: DecoratorMap = {
+    tags: [],
     decorate: [],
     onCreate: [],
     onFork: [],
@@ -391,6 +411,7 @@ function getDecoratorMap(decorators: ServiceDecoratorInfo[], sources: Map<Source
   for (const decorator of decorators) {
     const source = sources.get(decorator.source)!;
     decorator.scope && (map.scope = decorator.scope);
+    decorator.tags && map.tags.push(join('.', source, decorator.path, 'tags'));
     decorator.decorate && map.decorate.push([source, decorator.path, decorator.decorate]);
     decorator.hooks.onCreate && map.onCreate.push([source, decorator.path, decorator.hooks.onCreate]);
     decorator.hooks.onFork && map.onFork.push([source, decorator.path, decorator.hooks.onFork]);

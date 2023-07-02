@@ -21,16 +21,15 @@ import {
 
 
 export class Container<Services extends Record<string, any> = {}> {
-  private readonly definitions: Map<string, CompiledServiceDefinition>;
-  private readonly aliases: Map<string, string[]>;
+  private readonly definitions: Map<string, CompiledServiceDefinition> = new Map();
+  private readonly aliases: Map<string, string[]> = new Map();
+  private readonly tags: Map<string, [value: any, id: string][]> = new Map();
   private readonly globalServices: Store = new Store();
   private readonly localServices: AsyncLocalStorage<Store> = new AsyncLocalStorage();
   private readonly forkHooks: Map<string, CompiledServiceForkHook<any>> = new Map();
   private readonly creating: Set<string> = new Set();
 
   constructor(definitions: CompiledServiceDefinitionMap<Services>) {
-    this.definitions = new Map();
-    this.aliases = new Map();
     this.importDefinitions(definitions);
   }
 
@@ -68,6 +67,11 @@ export class Container<Services extends Record<string, any> = {}> {
     } else {
       throw new Error(`This should be unreachable!`);
     }
+  }
+
+  findByTag(tag: string): [value: any, get: () => unknown][] {
+    const services = this.tags.get(tag) ?? [];
+    return services.map(([value, id]) => [value, this.get(id) as any]);
   }
 
   register<K extends keyof Services>(alias: K, service: Services[K], force?: boolean): PromiseLike<void> | void;
@@ -144,6 +148,11 @@ export class Container<Services extends Record<string, any> = {}> {
       for (const alias of definition.aliases ?? []) {
         this.aliases.has(alias) || this.aliases.set(alias, []);
         this.aliases.get(alias)!.push(id);
+      }
+
+      for (const [tag, value] of Object.entries(definitions.tags ?? {})) {
+        this.tags.has(tag) || this.tags.set(tag, []);
+        this.tags.get(tag)!.push([value, id]);
       }
     }
   }

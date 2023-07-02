@@ -132,6 +132,10 @@ export class Autowiring {
   }
 
   private checkParameter(parameter: ParameterInfo, target: string, scope: ServiceScope): boolean {
+    if (parameter.flags & TypeFlag.Container) {
+      return false;
+    }
+
     const candidates = parameter.type && this.registry.getByType(parameter.type);
 
     if (!candidates || !candidates.length) {

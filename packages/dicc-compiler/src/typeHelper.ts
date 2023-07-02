@@ -29,6 +29,7 @@ export class TypeHelper {
   private readonly helper: SourceFile;
   private readonly refs: ReferenceResolver<typeof referenceSpecifiers>;
   private resolvers: number = 0;
+  private containerType?: Type;
 
   constructor(sourceFiles: SourceFiles) {
     this.helper = sourceFiles.getHelper();
@@ -101,6 +102,9 @@ export class TypeHelper {
     } else if (target === this.refs.get('AsyncIterable<T>')) {
       flags |= TypeFlag.Async | TypeFlag.Iterable;
       type = type.getTypeArguments()[0];
+    } else if (target === this.getContainerType()) {
+      flags |= TypeFlag.Container;
+      type = target;
     }
 
     if (type.isArray()) {
@@ -112,6 +116,8 @@ export class TypeHelper {
       throw new Error(`Iterable services are mutually exclusive with accessors and arrays`);
     } else if ((flags & TypeFlag.Injector) && flags !== TypeFlag.Injector) {
       throw new Error(`Injectors must accept a single resolved service instance`);
+    } else if ((flags & TypeFlag.Container) && flags !== TypeFlag.Container) {
+      throw new Error(`A dependency on the container can only be a direct dependency`);
     }
 
     return [type, flags];
@@ -257,5 +263,9 @@ export class TypeHelper {
         }
       }
     }
+  }
+
+  getContainerType(): Type {
+    return this.containerType ??= this.resolveRootType(this.refs.get('Container').getType());
   }
 }

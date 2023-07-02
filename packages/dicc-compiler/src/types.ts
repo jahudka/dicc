@@ -27,6 +27,7 @@ export type ServiceRegistrationInfo = {
   id?: string;
   type: Type;
   aliases: Type[];
+  tags?: boolean;
   object?: boolean;
   explicit?: boolean;
   factory?: ServiceFactoryInfo;
@@ -47,6 +48,7 @@ export type ServiceDecoratorInfo = {
   decorate?: ServiceHookInfo;
   hooks: ServiceHooks;
   scope?: ServiceScope;
+  tags?: boolean;
 };
 
 export type ServiceFactoryInfo = {
@@ -74,13 +76,14 @@ export type ParameterInfo = {
 };
 
 export enum TypeFlag {
-  None     = 0b000000,
-  Optional = 0b000001,
-  Array    = 0b000010,
-  Iterable = 0b000100,
-  Async    = 0b001000,
-  Accessor = 0b010000,
-  Injector = 0b100000,
+  None      = 0b0000000,
+  Optional  = 0b0000001,
+  Array     = 0b0000010,
+  Iterable  = 0b0000100,
+  Async     = 0b0001000,
+  Accessor  = 0b0010000,
+  Injector  = 0b0100000,
+  Container = 0b1000000,
 }
 
 export type ReferenceSpecifier<T extends SyntaxKind = any> = {
