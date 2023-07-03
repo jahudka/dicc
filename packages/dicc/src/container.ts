@@ -150,7 +150,7 @@ export class Container<Services extends Record<string, any> = {}> {
         this.aliases.get(alias)!.push(id);
       }
 
-      for (const [tag, value] of Object.entries(definitions.tags ?? {})) {
+      for (const [tag, value] of Object.entries(definition.tags ?? {})) {
         this.tags.has(tag) || this.tags.set(tag, []);
         this.tags.get(tag)!.push([value, id]);
       }
