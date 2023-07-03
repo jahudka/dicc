@@ -71,7 +71,7 @@ export class Container<Services extends Record<string, any> = {}> {
 
   findByTag(tag: string): [value: any, get: () => unknown][] {
     const services = this.tags.get(tag) ?? [];
-    return services.map(([value, id]) => [value, this.get(id) as any]);
+    return services.map(([value, id]) => [value, () => this.get(id)]);
   }
 
   register<K extends keyof Services>(alias: K, service: Services[K], force?: boolean): PromiseLike<void> | void;
