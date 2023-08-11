@@ -11,5 +11,5 @@
     "inversion of control"
   ],
   "license": "MIT",
-  "workspaces": ["packages/*"]
+  "workspaces": ["core/*"]
 }

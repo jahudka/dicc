@@ -20,7 +20,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/jahudka/dicc.git",
-    "directory": "packages/dicc"
+    "directory": "core/dicc"
   },
   "files": [
     "dist"

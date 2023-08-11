@@ -3,24 +3,24 @@ default: build
 
 .PHONY: clean
 clean:
-	cd packages/dicc && make clean
-	cd packages/cli && make clean
+	cd core/dicc && make clean
+	cd core/cli && make clean
 
 .PHONY: build
 build:
-	cd packages/dicc && make
-	cd packages/cli && make
+	cd core/dicc && make
+	cd core/cli && make
 
 .PHONY: rebuild
 rebuild:
-	cd packages/dicc && make rebuild
-	cd packages/cli && make rebuild
+	cd core/dicc && make rebuild
+	cd core/cli && make rebuild
 
 .PHONY: self-compile
 self-compile:
-	cd packages/cli && make compile
+	cd core/cli && make compile
 
 .PHONY: publish
 publish:
-	cd packages/dicc && make publish
-	cd packages/cli && make publish
+	cd core/dicc && make publish
+	cd core/cli && make publish

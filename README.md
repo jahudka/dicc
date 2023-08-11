@@ -153,6 +153,6 @@ indentation or something, I'll just fix it.
 
 
 [1]: https://jahudka.github.io/dicc/
-[2]: https://github.com/jahudka/dicc/blob/main/packages/cli/src/definitions.ts
-[3]: https://github.com/jahudka/dicc/blob/main/packages/cli/src/container.ts
-[4]: https://github.com/jahudka/dicc/blob/main/packages/cli/src/cli.ts
+[2]: https://github.com/jahudka/dicc/blob/main/core/cli/src/definitions.ts
+[3]: https://github.com/jahudka/dicc/blob/main/core/cli/src/container.ts
+[4]: https://github.com/jahudka/dicc/blob/main/core/cli/src/cli.ts
