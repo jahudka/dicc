@@ -1,7 +1,18 @@
+import { parseArgs } from 'util';
+
 export class Argv {
   readonly configPath: string;
 
   constructor() {
-    [,, this.configPath = 'dicc.yaml'] = process.argv;
+    const args = parseArgs({
+      strict: true,
+      allowPositionals: true,
+    });
+
+    if (args.positionals.length !== 1) {
+      throw new Error('Invalid number of arguments, expected 1');
+    }
+
+    this.configPath = args.positionals[0];
   }
 }

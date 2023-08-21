@@ -50,7 +50,6 @@ export class Compiler {
       moduleSpecifier: 'dicc',
       namedImports: [
         { name: 'Container' },
-        { name: 'ServiceType' },
       ],
     });
 
@@ -63,6 +62,8 @@ export class Compiler {
   }
 
   private writeMap(definitions: ServiceDefinitionInfo[], sources: Map<SourceFile, string>): void {
+    let useServiceType = false;
+
     this.output.addStatements((writer) => {
       writer.writeLine(`\nexport interface ${this.config.map} {`);
 
@@ -85,6 +86,11 @@ export class Compiler {
               aliasMap.has(alias) || aliasMap.set(alias, new Set());
               aliasMap.get(alias)!.add(fullType);
             }
+          }
+
+          if (!useServiceType && serviceType !== fullPath) {
+            useServiceType = true;
+            this.output.getImportDeclarationOrThrow('dicc').addNamedImport('ServiceType');
           }
         }
 
@@ -422,7 +428,7 @@ function getDecoratorMap(decorators: ServiceDecoratorInfo[], sources: Map<Source
 }
 
 function compareIDs(a: string, b: string): number {
-  return (a.indexOf('#') - b.indexOf('#')) || (a < b ? -1 : 1);
+  return (a.indexOf('#') - b.indexOf('#')) || a.localeCompare(b, 'en', { sensitivity: 'base', numeric: true });
 }
 
 function extractSources(definitions: ServiceDefinitionInfo[]): Map<SourceFile, string> {
