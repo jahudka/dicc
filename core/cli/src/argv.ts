@@ -9,8 +9,8 @@ export class Argv {
       allowPositionals: true,
     });
 
-    if (args.positionals.length !== 1) {
-      throw new Error('Invalid number of arguments, expected 1');
+    if (args.positionals.length > 1) {
+      throw new Error('Invalid number of arguments, expected 0-1');
     }
 
     this.configPath = args.positionals[0];
