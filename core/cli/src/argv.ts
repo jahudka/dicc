@@ -13,6 +13,6 @@ export class Argv {
       throw new Error('Invalid number of arguments, expected 0-1');
     }
 
-    this.configPath = args.positionals[0];
+    this.configPath = args.positionals[0] ?? 'dicc.yaml';
   }
 }
