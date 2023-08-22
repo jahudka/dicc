@@ -86,7 +86,7 @@ export type CompiledFactory<T, Services extends Record<string, any> = {}> = {
 
 export type CompiledAsyncServiceDefinition<T = any, Services extends Record<string, any> = {}>
   = CompiledServiceDefinitionOptions<NonNullable<T>, Services> & {
-    factory: CompiledFactory<Promise<T>, Services>;
+    factory: CompiledFactory<Promise<T> | T, Services>;
     async: true;
     onCreate?: CompiledAsyncServiceHook<NonNullable<T>, Services>;
   };
